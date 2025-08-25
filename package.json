@@ -1,0 +1,15 @@
+{
+  "name": "snap-web-app",
+  "version": "1.0.0",
+  "description": "A simple web application that integrates Snap Camera Kit to use your custom lens filters.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["snap", "camera-kit", "ar", "lens"],
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snap Lens Camera</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #2c3e50;
+        }
+
+        .app {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #e1e8ed;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 40px;
+            letter-spacing: -0.5px;
+        }
+
+        .camera-container {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: center;
+        }
+
+        #canvas-output {
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 1rem;
+            width: 640px;
+            height: 480px;
+            max-width: 100%;
+            max-height: 60vh;
+            object-fit: cover;
+            border: 2px solid #e1e8ed;
+        }
+
+        .controls {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #34495e;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            min-width: 140px;
+            letter-spacing: 0.25px;
+        }
+
+        button:hover {
+            background: #2c3e50;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(52, 73, 94, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #bdc3c7;
+            color: #7f8c8d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border: 1px solid #e9ecef;
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .status p {
+            margin: 0;
+            font-size: 1rem;
+            color: #495057;
+            font-weight: 400;
+        }
+
+        .config-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: left;
+        }
+
+        .config-info h3 {
+            margin-bottom: 16px;
+            color: #2c3e50;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .config-info ul, .config-info ol {
+            margin: 16px 0;
+            padding-left: 20px;
+        }
+
+        .config-info li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+            color: #495057;
+        }
+
+        .config-info code {
+            background: #e9ecef;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            font-size: 0.85em;
+            color: #495057;
+            border: 1px solid #ced4da;
+        }
+
+        .lens-id {
+            font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+            background: #ffffff;
+            padding: 10px 16px;
+            border-radius: 6px;
+            border: 1px solid #ced4da;
+            display: inline-block;
+            margin-top: 12px;
+            font-size: 0.9rem;
+            color: #495057;
+            font-weight: 500;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .app {
+                padding: 24px;
+                margin: 16px;
+            }
+
+            h1 {
+                font-size: 2rem;
+                margin-bottom: 24px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            button {
+                width: 200px;
+            }
+
+            #canvas-output {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 4/3;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <h1>Snap Lens Camera</h1>
+        
+        <div class="camera-container">
+            <div id="canvas-output">
+                Click "Start Camera" to begin
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="startCamera">Start Camera</button>
+            <button id="toggleLens">Toggle Lens</button>
+            <button id="capturePhoto">Capture Photo</button>
+        </div>
+        
+        <div class="status" id="status">
+            <p>Ready to start camera...</p>
+        </div>
+        
+        <div class="config-info">
+            <h3>How to Change Lens</h3>
+            <ol>
+                <li>Open <code>proper.js</code> in a text editor</li>
+                <li>Find the <strong>LENS_CONFIG</strong> section at the top</li>
+                <li>Change the <strong>LENS_ID</strong> value</li>
+                <li>Save and refresh this page</li>
+            </ol>
+            <div class="lens-id">Current lens: 40369030925</div>
+        </div>
+    </div>
+    
+    <script type="module" src="./proper.js"></script>
+</body>
+</html>
