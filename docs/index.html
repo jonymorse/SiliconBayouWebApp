@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Snap Lens Camera</title>
     <style>
         * {
@@ -191,6 +191,7 @@
 
             button {
                 width: 200px;
+                margin-bottom: 8px;
             }
 
             #canvas-output {
@@ -200,7 +201,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/index-C8rcvJ-X.js"></script>
+  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/index-Bph_o9ch.js"></script>
 </head>
 <body>
     <div class="app">
@@ -214,6 +215,7 @@
         
         <div class="controls">
             <button id="startCamera">Start Camera</button>
+            <button id="switchCamera">Switch Camera</button>
             <button id="toggleLens">Toggle Lens</button>
             <button id="capturePhoto">Capture Photo</button>
         </div>
@@ -230,7 +232,7 @@
                 <li>Change the <strong>LENS_ID</strong> value</li>
                 <li>Save and refresh this page</li>
             </ol>
-            <div class="lens-id">Current lens: 40369030925</div>
+            <div class="lens-id">Current lens: 40369030925 | Starting with: Rear Camera</div>
         </div>
     </div>
     
