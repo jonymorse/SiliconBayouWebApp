@@ -21,6 +21,7 @@ class SnapLensProper {
         this.mediaStream = null;
         this.lensActive = false;
         this.currentLens = null;
+        this.currentFacingMode = 'environment'; // Start with rear camera ('user' for front, 'environment' for rear)
         
         this.initializeApp();
     }
@@ -29,6 +30,7 @@ class SnapLensProper {
         document.getElementById('startCamera').addEventListener('click', () => this.startCamera());
         document.getElementById('capturePhoto').addEventListener('click', () => this.capturePhoto());
         document.getElementById('toggleLens').addEventListener('click', () => this.toggleLens());
+        document.getElementById('switchCamera').addEventListener('click', () => this.switchCamera());
         
         await this.initializeCameraKit();
     }
@@ -86,12 +88,13 @@ class SnapLensProper {
             this.updateStatus('🎥 Starting camera...');
             console.log('🎥 Getting user media...');
             
-            // Get camera stream
+            // Get camera stream - iOS optimized constraints
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { 
                     width: { ideal: 640, max: 1280 },
                     height: { ideal: 480, max: 720 },
-                    facingMode: 'user'
+                    facingMode: { exact: this.currentFacingMode }, // More reliable on iOS
+                    frameRate: { ideal: 30, max: 30 } // Optimize for performance
                 }
             });
             console.log('✅ Got media stream');
@@ -104,9 +107,13 @@ class SnapLensProper {
             await this.session.setSource(source);
             console.log('✅ Set source to session');
             
-            // Apply mirror transform (like in the example)
-            source.setTransform(Transform2D.MirrorX);
-            console.log('✅ Applied mirror transform');
+            // Apply mirror transform only for front camera
+            if (this.currentFacingMode === 'user') {
+                source.setTransform(Transform2D.MirrorX);
+                console.log('✅ Applied mirror transform for front camera');
+            } else {
+                console.log('✅ No mirror transform for rear camera');
+            }
             
             // Start rendering to live output
             this.session.play("live");
@@ -116,7 +123,115 @@ class SnapLensProper {
             
         } catch (error) {
             console.error('❌ Failed to start camera:', error);
-            this.updateStatus(`❌ Camera error: ${error.message}`);
+            
+            // iOS-specific error messages
+            if (error.name === 'NotAllowedError') {
+                this.updateStatus('❌ Camera permission denied. Enable in Settings > Safari > Camera');
+            } else if (error.name === 'NotFoundError') {
+                this.updateStatus('❌ No camera found. Try the other camera button.');
+            } else if (error.name === 'OverconstrainedError') {
+                this.updateStatus('❌ Camera constraints not supported. Trying basic settings...');
+                // Fallback for iOS
+                this.tryFallbackCamera();
+            } else {
+                this.updateStatus(`❌ Camera error: ${error.message}`);
+            }
+        }
+    }
+    
+    // Fallback camera method for iOS compatibility
+    async tryFallbackCamera() {
+        try {
+            console.log('🔄 Trying fallback camera settings for iOS...');
+            
+            // Simplified constraints for iOS compatibility
+            this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: this.currentFacingMode // Remove 'exact' constraint
+                }
+            });
+            
+            console.log('✅ Fallback camera successful');
+            
+            // Continue with normal setup
+            const source = createMediaStreamSource(this.mediaStream);
+            await this.session.setSource(source);
+            
+            if (this.currentFacingMode === 'user') {
+                source.setTransform(Transform2D.MirrorX);
+            }
+            
+            this.session.play("live");
+            this.updateStatus('✅ Camera started with basic settings!');
+            
+        } catch (fallbackError) {
+            console.error('❌ Fallback camera also failed:', fallbackError);
+            this.updateStatus('❌ Unable to access camera. Please check permissions and try again.');
+        }
+    }
+    
+    async switchCamera() {
+        if (!this.session) {
+            this.updateStatus('❌ Camera not started yet');
+            return;
+        }
+        
+        try {
+            this.updateStatus('🔄 Switching camera...');
+            console.log('🔄 Switching camera...');
+            
+            // Stop current stream
+            if (this.mediaStream) {
+                this.mediaStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Toggle facing mode
+            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+            console.log(`📷 Switching to ${this.currentFacingMode} camera`);
+            
+            // Get new camera stream - iOS optimized
+            this.mediaStream = await navigator.mediaDevices.getUserMedia({
+                video: { 
+                    width: { ideal: 640, max: 1280 },
+                    height: { ideal: 480, max: 720 },
+                    facingMode: { exact: this.currentFacingMode }, // More reliable on iOS
+                    frameRate: { ideal: 30, max: 30 } // Optimize for performance
+                }
+            });
+            console.log('✅ Got new media stream');
+            
+            // Create new Camera Kit source
+            const source = createMediaStreamSource(this.mediaStream);
+            console.log('✅ Created new media stream source');
+            
+            // Apply mirror transform only for front camera
+            if (this.currentFacingMode === 'user') {
+                source.setTransform(Transform2D.MirrorX);
+                console.log('✅ Applied mirror transform for front camera');
+            } else {
+                console.log('✅ No mirror transform for rear camera');
+            }
+            
+            // Set new source to session
+            await this.session.setSource(source);
+            console.log('✅ Set new source to session');
+            
+            // If lens was active, reapply it
+            if (this.lensActive && this.currentLens) {
+                console.log('🎭 Reapplying lens after camera switch...');
+                await this.session.applyLens(this.currentLens);
+                console.log('✅ Lens reapplied');
+            }
+            
+            const cameraType = this.currentFacingMode === 'user' ? 'front' : 'rear';
+            this.updateStatus(`✅ Switched to ${cameraType} camera!`);
+            
+        } catch (error) {
+            console.error('❌ Failed to switch camera:', error);
+            this.updateStatus(`❌ Camera switch error: ${error.message}`);
+            
+            // Try to restore previous camera if switch failed
+            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
         }
     }    
     async toggleLens() {

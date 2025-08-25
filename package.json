@@ -9,7 +9,18 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "keywords": ["snap", "camera-kit", "ar", "lens"],
+  "keywords": [
+    "snap",
+    "camera-kit",
+    "ar",
+    "lens"
+  ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "@snap/camera-kit": "^1.8.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.19"
+  }
 }
