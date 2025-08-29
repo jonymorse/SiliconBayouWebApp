@@ -14,7 +14,6 @@ const LENS_CONFIG = {
 
 class SnapLensProper {
     constructor() {
-        this.statusEl = document.getElementById('status');
         this.outputContainer = document.getElementById('canvas-output');
         this.cameraKit = null;
         this.session = null;
@@ -37,7 +36,7 @@ class SnapLensProper {
     
     async initializeCameraKit() {
         try {
-            this.updateStatus('Initializing Camera Kit...');
+            this.updateStatus('Initializing...');
             console.log('🚀 Bootstrapping Camera Kit...');
             
             const apiToken = LENS_CONFIG.API_TOKEN;
@@ -55,7 +54,7 @@ class SnapLensProper {
             // Handle errors
             this.session.events.addEventListener("error", (event) => {
                 console.error('❌ Camera Kit error:', event.detail);
-                this.updateStatus(`❌ Camera Kit error: ${event.detail}`);
+                this.updateStatus(`Error: ${event.detail}`);
             });
             
             // CRITICAL: Replace placeholder with Camera Kit's live output canvas
@@ -66,20 +65,18 @@ class SnapLensProper {
             this.liveCanvas = this.session.output.live;
             this.liveCanvas.id = 'live-canvas';
             this.liveCanvas.style.cssText = `
-                display: block;
-                max-width: 100%;
-                height: auto;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
                 background: #000;
-                border: 2px solid #007bff;
-                border-radius: 10px;
-                margin: 0 auto;
+                display: block;
             `;
             
-            this.updateStatus('✅ Camera Kit ready! Click "Start Camera".');
+            this.updateStatus('Tap ▶ to start');
             
         } catch (error) {
             console.error('❌ Failed to initialize Camera Kit:', error);
-            this.updateStatus(`❌ Init error: ${error.message}`);
+            this.updateStatus(`Init error: ${error.message}`);
         }
     }
     
@@ -119,22 +116,22 @@ class SnapLensProper {
             this.session.play("live");
             console.log('✅ Started live playback');
             
-            this.updateStatus('✅ Camera started! Video should appear above. Click "Toggle Lens" for AR.');
+            this.updateStatus('Camera started! Tap ✨ for AR');
             
         } catch (error) {
             console.error('❌ Failed to start camera:', error);
             
             // iOS-specific error messages
             if (error.name === 'NotAllowedError') {
-                this.updateStatus('❌ Camera permission denied. Enable in Settings > Safari > Camera');
+                this.updateStatus('Camera permission denied');
             } else if (error.name === 'NotFoundError') {
-                this.updateStatus('❌ No camera found. Try the other camera button.');
+                this.updateStatus('No camera found');
             } else if (error.name === 'OverconstrainedError') {
-                this.updateStatus('❌ Camera constraints not supported. Trying basic settings...');
+                this.updateStatus('Trying basic settings...');
                 // Fallback for iOS
                 this.tryFallbackCamera();
             } else {
-                this.updateStatus(`❌ Camera error: ${error.message}`);
+                this.updateStatus(`Camera error: ${error.message}`);
             }
         }
     }
@@ -162,22 +159,22 @@ class SnapLensProper {
             }
             
             this.session.play("live");
-            this.updateStatus('✅ Camera started with basic settings!');
+            this.updateStatus('Camera started!');
             
         } catch (fallbackError) {
             console.error('❌ Fallback camera also failed:', fallbackError);
-            this.updateStatus('❌ Unable to access camera. Please check permissions and try again.');
+            this.updateStatus('Unable to access camera');
         }
     }
     
     async switchCamera() {
         if (!this.session) {
-            this.updateStatus('❌ Camera not started yet');
+            this.updateStatus('Start camera first');
             return;
         }
         
         try {
-            this.updateStatus('🔄 Switching camera...');
+            this.updateStatus('Switching camera...');
             console.log('🔄 Switching camera...');
             
             // Stop current stream
@@ -224,11 +221,11 @@ class SnapLensProper {
             }
             
             const cameraType = this.currentFacingMode === 'user' ? 'front' : 'rear';
-            this.updateStatus(`✅ Switched to ${cameraType} camera!`);
+            this.updateStatus(`Switched to ${cameraType} camera`);
             
         } catch (error) {
             console.error('❌ Failed to switch camera:', error);
-            this.updateStatus(`❌ Camera switch error: ${error.message}`);
+            this.updateStatus(`Switch error: ${error.message}`);
             
             // Try to restore previous camera if switch failed
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
@@ -236,7 +233,7 @@ class SnapLensProper {
     }    
     async toggleLens() {
         if (!this.session) {
-            this.updateStatus('❌ Camera not started yet');
+            this.updateStatus('Start camera first');
             return;
         }
         
@@ -247,11 +244,11 @@ class SnapLensProper {
                 await this.session.clearLens();
                 this.lensActive = false;
                 this.currentLens = null;
-                this.updateStatus('✅ Lens removed - showing normal camera');
+                this.updateStatus('Lens removed');
                 
             } else {
                 // Apply lens
-                this.updateStatus('🎭 Loading lens...');
+                this.updateStatus('Loading lens...');
                 console.log('🎭 Loading lens...');
                 
                 const lensId = LENS_CONFIG.LENS_ID;
@@ -267,13 +264,13 @@ class SnapLensProper {
                 await this.session.applyLens(this.currentLens);
                 
                 this.lensActive = true;
-                this.updateStatus('✅ Lens applied! AR effect should be visible now.');
+                this.updateStatus('AR lens active!');
                 console.log('✅ Lens applied successfully');
             }
             
         } catch (error) {
             console.error('❌ Lens error:', error);
-            this.updateStatus(`❌ Lens error: ${error.message}`);
+            this.updateStatus(`Lens error: ${error.message}`);
             
             // Reset lens state on error
             this.lensActive = false;
@@ -283,7 +280,7 @@ class SnapLensProper {
     
     async capturePhoto() {
         if (!this.session || !this.liveCanvas) {
-            this.updateStatus('❌ Camera not started yet');
+            this.updateStatus('Start camera first');
             return;
         }
         
@@ -311,16 +308,19 @@ class SnapLensProper {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            this.updateStatus('📸 Photo captured and downloaded!');
+            this.updateStatus('Photo saved!');
             
         } catch (error) {
             console.error('❌ Capture error:', error);
-            this.updateStatus(`❌ Capture error: ${error.message}`);
+            this.updateStatus(`Capture error: ${error.message}`);
         }
     }
     
     updateStatus(message) {
-        this.statusEl.innerHTML = `<p>${message}</p>`;
+        // Update the canvas output text when camera isn't started yet
+        if (this.outputContainer && this.outputContainer.tagName === 'DIV') {
+            this.outputContainer.textContent = message;
+        }
         console.log('📢', message);
     }
     
