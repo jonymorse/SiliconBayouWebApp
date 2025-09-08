@@ -39,7 +39,12 @@
             width: 100%;
             position: relative;
             background: #000;
+
+            /* Add these: */
+            aspect-ratio: 9 / 16;   /* lock to portrait shape */
+            overflow: hidden;       /* clip overflow if needed */
         }
+
 
         #canvas-output {
             width: 100%;

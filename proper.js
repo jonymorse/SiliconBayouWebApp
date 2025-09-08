@@ -41,10 +41,30 @@ class SnapLensProper {
             this.outputContainer.replaceWith(this.session.output.live);
             this.liveCanvas = this.session.output.live;
             this.liveCanvas.id = 'live-canvas';
-            this.liveCanvas.style.cssText = `
-                width: 100%; height: 100%; object-fit: cover;
-                background: #000; display: block;
-            `;
+            
+            // Match CSS size
+            this.liveCanvas.style.width = "100%";
+            this.liveCanvas.style.height = "100%";
+            this.liveCanvas.style.objectFit = "cover";
+            this.liveCanvas.style.background = "#000";
+            this.liveCanvas.style.display = "block";
+            
+            // Adjust backing-store size to avoid oversized UI
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const resizeLiveCanvas = () => {
+                const rect = this.liveCanvas.getBoundingClientRect();
+                this.liveCanvas.width = Math.round(rect.width * dpr);
+                this.liveCanvas.height = Math.round(rect.height * dpr);
+                console.log(`Canvas sized: ${this.liveCanvas.width}x${this.liveCanvas.height} (CSS: ${rect.width}x${rect.height}, DPR: ${dpr})`);
+            };
+            
+            // Setup observers to keep canvas backing-store synchronized
+            new ResizeObserver(resizeLiveCanvas).observe(this.liveCanvas.parentElement);
+            window.addEventListener("orientationchange", resizeLiveCanvas);
+            window.addEventListener("load", resizeLiveCanvas);
+            
+            // Initial resize
+            resizeLiveCanvas();
             
             this.updateStatus('Ready to start');
             
