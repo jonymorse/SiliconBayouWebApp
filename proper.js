@@ -22,6 +22,10 @@ class SnapLensProper {
         this.currentLens = null;
         this.currentFacingMode = 'environment'; // Start with rear camera ('user' for front, 'environment' for rear)
         
+        // Double-tap detection variables
+        this.lastTap = 0;
+        this.tapTimeout = null;
+        
         this.initializeApp();
     }
     
@@ -31,7 +35,13 @@ class SnapLensProper {
         document.getElementById('toggleLens').addEventListener('click', () => this.toggleLens());
         document.getElementById('switchCamera').addEventListener('click', () => this.switchCamera());
         
+        // Add double-tap gesture for camera switching
+        this.setupDoubleTapGesture();
+        
         await this.initializeCameraKit();
+        
+        // Auto-start camera and apply lens after initialization
+        await this.autoStartWithLens();
     }
     
     async initializeCameraKit() {
@@ -322,6 +332,75 @@ class SnapLensProper {
             this.outputContainer.textContent = message;
         }
         console.log('📢', message);
+    }
+    
+    // Auto-start camera and apply lens
+    async autoStartWithLens() {
+        try {
+            this.updateStatus('🚀 Auto-starting camera...');
+            
+            // Start camera first
+            await this.startCamera();
+            
+            // Wait a moment for camera to stabilize
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Apply lens automatically
+            this.updateStatus('🎭 Auto-applying AR lens...');
+            await this.toggleLens();
+            
+            console.log('✅ Auto-start complete!');
+            
+        } catch (error) {
+            console.error('❌ Auto-start failed:', error);
+            this.updateStatus('Auto-start failed - use manual controls');
+        }
+    }
+    
+    // Setup double-tap gesture for camera switching
+    setupDoubleTapGesture() {
+        const cameraContainer = document.querySelector('.camera-container');
+        
+        // Handle touch events for mobile
+        cameraContainer.addEventListener('touchend', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            this.handleDoubleTap();
+        });
+        
+        // Handle click events for desktop testing
+        cameraContainer.addEventListener('click', (e) => {
+            // Only handle if not clicking on buttons
+            if (!e.target.closest('button')) {
+                this.handleDoubleTap();
+            }
+        });
+        
+        console.log('👆 Double-tap gesture enabled - double-tap screen to flip camera');
+    }
+    
+    // Handle double-tap detection
+    handleDoubleTap() {
+        const currentTime = new Date().getTime();
+        const tapLength = currentTime - this.lastTap;
+        
+        // Clear any existing timeout
+        if (this.tapTimeout) {
+            clearTimeout(this.tapTimeout);
+            this.tapTimeout = null;
+        }
+        
+        // Check if this is a double-tap (within 300ms)
+        if (tapLength < 300 && tapLength > 0) {
+            console.log('👆👆 Double-tap detected - switching camera...');
+            this.switchCamera();
+            this.lastTap = 0; // Reset to prevent triple-tap
+        } else {
+            // Set timeout to reset lastTap after double-tap window
+            this.lastTap = currentTime;
+            this.tapTimeout = setTimeout(() => {
+                this.lastTap = 0;
+            }, 300);
+        }
     }
     
     // Cleanup method
