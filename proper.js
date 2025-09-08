@@ -1,14 +1,8 @@
 import { bootstrapCameraKit, createMediaStreamSource, Transform2D } from '@snap/camera-kit';
 
-// 🎭 LENS CONFIGURATION - Easy to modify!
 const LENS_CONFIG = {
-    // Your API token from Camera Kit Portal
     API_TOKEN: 'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M',
-    
-    // Your lens ID - Change this to use different lenses
     LENS_ID: '0c7703b6-6fbb-428f-98f0-68341c894ad3',
-    
-    // Your lens group ID from Camera Kit Portal  
     LENS_GROUP_ID: '1d5338a5-2299-44e8-b41d-e69573824971'
 };
 
@@ -20,9 +14,7 @@ class SnapLensProper {
         this.mediaStream = null;
         this.lensActive = false;
         this.currentLens = null;
-        this.currentFacingMode = 'environment'; // Start with rear camera ('user' for front, 'environment' for rear)
-        
-        // Double-tap detection variables
+        this.currentFacingMode = 'environment';
         this.lastTap = 0;
         this.tapTimeout = null;
         
@@ -30,137 +22,77 @@ class SnapLensProper {
     }
     
     async initializeApp() {
-        document.getElementById('startCamera').addEventListener('click', () => this.startCamera());
-        document.getElementById('capturePhoto').addEventListener('click', () => this.capturePhoto());
-        document.getElementById('toggleLens').addEventListener('click', () => this.toggleLens());
-        document.getElementById('switchCamera').addEventListener('click', () => this.switchCamera());
-        
-        // Add double-tap gesture for camera switching
+        // Remove button event listeners since buttons are hidden
         this.setupDoubleTapGesture();
-        
         await this.initializeCameraKit();
-        
-        // Auto-start camera and apply lens after initialization
         await this.autoStartWithLens();
-    }
-    
+    }    
     async initializeCameraKit() {
         try {
             this.updateStatus('Initializing...');
-            console.log('🚀 Bootstrapping Camera Kit...');
-            
-            const apiToken = LENS_CONFIG.API_TOKEN;
-            
-            // Bootstrap Camera Kit (downloads WebAssembly)
-            this.cameraKit = await bootstrapCameraKit({ 
-                apiToken: apiToken 
-            });
-            console.log('✅ Camera Kit bootstrapped');
-            
-            // Create session (initializes rendering engine)
+            this.cameraKit = await bootstrapCameraKit({ apiToken: LENS_CONFIG.API_TOKEN });
             this.session = await this.cameraKit.createSession();
-            console.log('✅ Camera Kit session created');
             
-            // Handle errors
             this.session.events.addEventListener("error", (event) => {
-                console.error('❌ Camera Kit error:', event.detail);
+                console.error('Camera Kit error:', event.detail);
                 this.updateStatus(`Error: ${event.detail}`);
             });
             
-            // CRITICAL: Replace placeholder with Camera Kit's live output canvas
-            console.log('🎥 Setting up live output canvas...');
             this.outputContainer.replaceWith(this.session.output.live);
-            
-            // Update reference to the new canvas
             this.liveCanvas = this.session.output.live;
             this.liveCanvas.id = 'live-canvas';
             this.liveCanvas.style.cssText = `
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-                background: #000;
-                display: block;
+                width: 100%; height: 100%; object-fit: cover;
+                background: #000; display: block;
             `;
             
-            this.updateStatus('Tap ▶ to start');
+            this.updateStatus('Ready to start');
             
         } catch (error) {
-            console.error('❌ Failed to initialize Camera Kit:', error);
+            console.error('Failed to initialize Camera Kit:', error);
             this.updateStatus(`Init error: ${error.message}`);
         }
     }
     
     async startCamera() {
         try {
-            this.updateStatus('🎥 Starting camera...');
-            console.log('🎥 Getting user media...');
+            this.updateStatus('Starting camera...');
             
-            // Get camera stream - iOS optimized constraints
+            // Original camera constraints - keeping your rendering approach
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { 
                     width: { ideal: 640, max: 1280 },
                     height: { ideal: 480, max: 720 },
-                    facingMode: { exact: this.currentFacingMode }, // More reliable on iOS
-                    frameRate: { ideal: 30, max: 30 } // Optimize for performance
+                    facingMode: { exact: this.currentFacingMode },
+                    frameRate: { ideal: 30, max: 30 }
                 }
             });
-            console.log('✅ Got media stream');
             
-            // Create Camera Kit source
             const source = createMediaStreamSource(this.mediaStream);
-            console.log('✅ Created media stream source');
-            
-            // Set source to session
             await this.session.setSource(source);
-            console.log('✅ Set source to session');
             
-            // Apply mirror transform only for front camera
             if (this.currentFacingMode === 'user') {
                 source.setTransform(Transform2D.MirrorX);
-                console.log('✅ Applied mirror transform for front camera');
-            } else {
-                console.log('✅ No mirror transform for rear camera');
             }
             
-            // Start rendering to live output
             this.session.play("live");
-            console.log('✅ Started live playback');
-            
-            this.updateStatus('Camera started! Tap ✨ for AR');
+            this.updateStatus('Camera ready!');
             
         } catch (error) {
-            console.error('❌ Failed to start camera:', error);
-            
-            // iOS-specific error messages
-            if (error.name === 'NotAllowedError') {
-                this.updateStatus('Camera permission denied');
-            } else if (error.name === 'NotFoundError') {
-                this.updateStatus('No camera found');
-            } else if (error.name === 'OverconstrainedError') {
-                this.updateStatus('Trying basic settings...');
-                // Fallback for iOS
+            console.error('Camera failed:', error);
+            if (error.name === 'OverconstrainedError') {
                 this.tryFallbackCamera();
             } else {
-                this.updateStatus(`Camera error: ${error.message}`);
+                this.updateStatus('Camera unavailable');
             }
         }
-    }
-    
-    // Fallback camera method for iOS compatibility
+    }    
     async tryFallbackCamera() {
         try {
-            console.log('🔄 Trying fallback camera settings for iOS...');
-            
-            // Simplified constraints for iOS compatibility
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: this.currentFacingMode // Remove 'exact' constraint
-                }
+                video: { facingMode: this.currentFacingMode }
             });
             
-            console.log('✅ Fallback camera successful');
-            
-            // Continue with normal setup
             const source = createMediaStreamSource(this.mediaStream);
             await this.session.setSource(source);
             
@@ -170,240 +102,110 @@ class SnapLensProper {
             
             this.session.play("live");
             this.updateStatus('Camera started!');
-            
         } catch (fallbackError) {
-            console.error('❌ Fallback camera also failed:', fallbackError);
+            console.error('Fallback camera failed:', fallbackError);
             this.updateStatus('Unable to access camera');
         }
     }
     
     async switchCamera() {
-        if (!this.session) {
-            this.updateStatus('Start camera first');
-            return;
-        }
+        if (!this.session) return;
         
         try {
-            this.updateStatus('Switching camera...');
-            console.log('🔄 Switching camera...');
-            
-            // Stop current stream
             if (this.mediaStream) {
                 this.mediaStream.getTracks().forEach(track => track.stop());
             }
             
-            // Toggle facing mode
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            console.log(`📷 Switching to ${this.currentFacingMode} camera`);
+            await this.startCamera();
             
-            // Get new camera stream - iOS optimized
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    width: { ideal: 640, max: 1280 },
-                    height: { ideal: 480, max: 720 },
-                    facingMode: { exact: this.currentFacingMode }, // More reliable on iOS
-                    frameRate: { ideal: 30, max: 30 } // Optimize for performance
-                }
-            });
-            console.log('✅ Got new media stream');
-            
-            // Create new Camera Kit source
-            const source = createMediaStreamSource(this.mediaStream);
-            console.log('✅ Created new media stream source');
-            
-            // Apply mirror transform only for front camera
-            if (this.currentFacingMode === 'user') {
-                source.setTransform(Transform2D.MirrorX);
-                console.log('✅ Applied mirror transform for front camera');
-            } else {
-                console.log('✅ No mirror transform for rear camera');
-            }
-            
-            // Set new source to session
-            await this.session.setSource(source);
-            console.log('✅ Set new source to session');
-            
-            // If lens was active, reapply it
             if (this.lensActive && this.currentLens) {
-                console.log('🎭 Reapplying lens after camera switch...');
                 await this.session.applyLens(this.currentLens);
-                console.log('✅ Lens reapplied');
             }
-            
-            const cameraType = this.currentFacingMode === 'user' ? 'front' : 'rear';
-            this.updateStatus(`Switched to ${cameraType} camera`);
             
         } catch (error) {
-            console.error('❌ Failed to switch camera:', error);
-            this.updateStatus(`Switch error: ${error.message}`);
-            
-            // Try to restore previous camera if switch failed
+            console.error('Switch failed:', error);
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
         }
     }    
     async toggleLens() {
-        if (!this.session) {
-            this.updateStatus('Start camera first');
-            return;
-        }
+        if (!this.session) return;
         
         try {
             if (this.lensActive && this.currentLens) {
-                // Remove lens - just clear it
-                console.log('🔄 Removing lens...');
                 await this.session.clearLens();
                 this.lensActive = false;
                 this.currentLens = null;
                 this.updateStatus('Lens removed');
-                
             } else {
-                // Apply lens
                 this.updateStatus('Loading lens...');
-                console.log('🎭 Loading lens...');
-                
-                const lensId = LENS_CONFIG.LENS_ID;
-                const lensGroupId = LENS_CONFIG.LENS_GROUP_ID;
-                
-                // Load lens from repository
-                console.log(`📦 Loading lens ${lensId} from group ${lensGroupId}...`);
-                this.currentLens = await this.cameraKit.lensRepository.loadLens(lensId, lensGroupId);
-                console.log('✅ Lens loaded:', this.currentLens);
-                
-                // Apply lens to session
-                console.log('🎨 Applying lens to session...');
+                this.currentLens = await this.cameraKit.lensRepository.loadLens(
+                    LENS_CONFIG.LENS_ID, 
+                    LENS_CONFIG.LENS_GROUP_ID
+                );
                 await this.session.applyLens(this.currentLens);
-                
                 this.lensActive = true;
-                this.updateStatus('AR lens active!');
-                console.log('✅ Lens applied successfully');
+                this.updateStatus('AR active!');
             }
-            
         } catch (error) {
-            console.error('❌ Lens error:', error);
+            console.error('Lens error:', error);
             this.updateStatus(`Lens error: ${error.message}`);
-            
-            // Reset lens state on error
             this.lensActive = false;
             this.currentLens = null;
         }
     }
     
-    async capturePhoto() {
-        if (!this.session || !this.liveCanvas) {
-            this.updateStatus('Start camera first');
-            return;
-        }
-        
-        try {
-            console.log('📸 Capturing photo...');
-            
-            // Capture from the live canvas (includes lens effects)
-            const blob = await new Promise(resolve => {
-                this.liveCanvas.toBlob(resolve, 'image/png', 1.0);
-            });
-            
-            if (!blob) {
-                throw new Error('Failed to create image blob');
-            }
-            
-            console.log('✅ Created image blob');
-            
-            // Download the image
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `snap-lens-${this.lensActive ? 'with-lens-' : 'normal-'}${Date.now()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            this.updateStatus('Photo saved!');
-            
-        } catch (error) {
-            console.error('❌ Capture error:', error);
-            this.updateStatus(`Capture error: ${error.message}`);
-        }
-    }
-    
-    updateStatus(message) {
-        // Update the canvas output text when camera isn't started yet
-        if (this.outputContainer && this.outputContainer.tagName === 'DIV') {
-            this.outputContainer.textContent = message;
-        }
-        console.log('📢', message);
-    }
-    
-    // Auto-start camera and apply lens
     async autoStartWithLens() {
         try {
-            this.updateStatus('🚀 Auto-starting camera...');
-            
-            // Start camera first
+            this.updateStatus('Auto-starting...');
             await this.startCamera();
-            
-            // Wait a moment for camera to stabilize
             await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Apply lens automatically
-            this.updateStatus('🎭 Auto-applying AR lens...');
             await this.toggleLens();
-            
-            console.log('✅ Auto-start complete!');
-            
         } catch (error) {
-            console.error('❌ Auto-start failed:', error);
-            this.updateStatus('Auto-start failed - use manual controls');
+            console.error('Auto-start failed:', error);
+            this.updateStatus('Auto-start failed');
         }
-    }
-    
-    // Setup double-tap gesture for camera switching
+    }    
     setupDoubleTapGesture() {
         const cameraContainer = document.querySelector('.camera-container');
         
-        // Handle touch events for mobile
         cameraContainer.addEventListener('touchend', (e) => {
-            e.preventDefault(); // Prevent default touch behavior
+            e.preventDefault();
             this.handleDoubleTap();
         });
         
-        // Handle click events for desktop testing
         cameraContainer.addEventListener('click', (e) => {
-            // Only handle if not clicking on buttons
             if (!e.target.closest('button')) {
                 this.handleDoubleTap();
             }
         });
-        
-        console.log('👆 Double-tap gesture enabled - double-tap screen to flip camera');
     }
     
-    // Handle double-tap detection
     handleDoubleTap() {
-        const currentTime = new Date().getTime();
+        const currentTime = Date.now();
         const tapLength = currentTime - this.lastTap;
         
-        // Clear any existing timeout
         if (this.tapTimeout) {
             clearTimeout(this.tapTimeout);
             this.tapTimeout = null;
         }
         
-        // Check if this is a double-tap (within 300ms)
         if (tapLength < 300 && tapLength > 0) {
-            console.log('👆👆 Double-tap detected - switching camera...');
             this.switchCamera();
-            this.lastTap = 0; // Reset to prevent triple-tap
+            this.lastTap = 0;
         } else {
-            // Set timeout to reset lastTap after double-tap window
             this.lastTap = currentTime;
-            this.tapTimeout = setTimeout(() => {
-                this.lastTap = 0;
-            }, 300);
+            this.tapTimeout = setTimeout(() => this.lastTap = 0, 300);
         }
     }
     
-    // Cleanup method
+    updateStatus(message) {
+        if (this.outputContainer && this.outputContainer.tagName === 'DIV') {
+            this.outputContainer.textContent = message;
+        }
+        console.log(message);
+    }
+    
     destroy() {
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach(track => track.stop());
@@ -414,13 +216,10 @@ class SnapLensProper {
     }
 }
 
-// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 Starting proper Camera Kit app...');
     window.snapApp = new SnapLensProper();
 });
 
-// Cleanup on page unload
 window.addEventListener('beforeunload', () => {
     if (window.snapApp) {
         window.snapApp.destroy();
