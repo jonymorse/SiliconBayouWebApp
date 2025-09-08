@@ -6,7 +6,7 @@ const LENS_CONFIG = {
     API_TOKEN: 'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M',
     
     // Your lens ID - Change this to use different lenses
-    LENS_ID: 'bb2576c7-eb30-43a7-82a0-a1eba1455af2',
+    LENS_ID: '0c7703b6-6fbb-428f-98f0-68341c894ad3',
     
     // Your lens group ID from Camera Kit Portal  
     LENS_GROUP_ID: '1d5338a5-2299-44e8-b41d-e69573824971'
