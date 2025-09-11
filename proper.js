@@ -17,6 +17,7 @@ class SnapLensProper {
         this.currentFacingMode = 'environment';
         this.lastTap = 0;
         this.tapTimeout = null;
+        this.backgroundAudio = document.getElementById('backgroundAudio');
         
         this.initializeApp();
     }
@@ -24,6 +25,7 @@ class SnapLensProper {
     async initializeApp() {
         // Remove button event listeners since buttons are hidden
         this.setupDoubleTapGesture();
+        this.setupBackgroundAudio();
         await this.initializeCameraKit();
         await this.autoStartWithLens();
     }    
@@ -201,6 +203,48 @@ class SnapLensProper {
         });
     }
     
+    setupBackgroundAudio() {
+        if (!this.backgroundAudio) {
+            console.error('Background audio element not found!');
+            return;
+        }
+        
+        // Set audio properties
+        this.backgroundAudio.volume = 0.2; // Lower volume for ambient background
+        this.backgroundAudio.loop = true;
+        
+        // Add basic event listeners
+        this.backgroundAudio.addEventListener('canplay', () => console.log('Audio: Ready to play'));
+        this.backgroundAudio.addEventListener('error', (e) => {
+            console.error('Audio loading error:', e.target.error);
+        });
+        this.backgroundAudio.addEventListener('playing', () => console.log('Audio: Now playing'));
+        
+        // Function to start audio (requires user interaction)
+        const startAudio = async () => {
+            try {
+                await this.backgroundAudio.play();
+                console.log('✅ Background audio started successfully!');
+                // Remove event listeners once audio starts
+                document.removeEventListener('touchstart', startAudio);
+                document.removeEventListener('click', startAudio);
+                document.removeEventListener('keydown', startAudio);
+            } catch (error) {
+                console.error('❌ Audio play failed:', error);
+            }
+        };
+        
+        // Add event listeners for user interaction
+        document.addEventListener('touchstart', startAudio, { once: true });
+        document.addEventListener('click', startAudio, { once: true });
+        document.addEventListener('keydown', startAudio, { once: true });
+        
+        // Try to play immediately (will work if autoplay is allowed)
+        this.backgroundAudio.play().catch((error) => {
+            console.log('Audio autoplay prevented - waiting for user interaction');
+        });
+    }
+    
     handleDoubleTap() {
         const currentTime = Date.now();
         const tapLength = currentTime - this.lastTap;
@@ -232,6 +276,10 @@ class SnapLensProper {
         }
         if (this.session) {
             this.session.destroy().catch(console.error);
+        }
+        if (this.backgroundAudio) {
+            this.backgroundAudio.pause();
+            this.backgroundAudio.currentTime = 0;
         }
     }
 }
