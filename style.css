@@ -1,132 +1,112 @@
-/* Reset and base styles */
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
+/* Reset */
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* Page */
 body {
-    font-family: 'Arial', sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
+               Ubuntu, Cantarell, sans-serif;
+  background: #000;         /* camera-first layout */
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: #fff;
+  overflow: hidden;         /* prevent rubber-band scroll over canvas */
 }
 
+/* Full-viewport Camera */
+.camera-container {
+  position: fixed;          /* anchor to viewport */
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;           /* dynamic viewport height (iOS-safe) */
+  background: #000;
+  overflow: hidden;
+  /* IMPORTANT: do NOT set aspect-ratio or flex centering here */
+}
+
+/* Never transform/filter the container or the live canvas */
+.camera-container,
+#live-canvas {
+  transform: none !important;
+  filter: none !important;
+}
+
+/* The AR canvas injected by Camera Kit (you set this id in JS) */
+#live-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  display: block;
+  background: #000;
+
+  /* Ensure no decorative styles warp the canvas on phones */
+  border: 0 !important;
+  border-radius: 0 !important;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+/* If you also use other canvases/videos, scope them so they won't affect #live-canvas */
+#videoElement,
+#canvasElement,
+#canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #000;
+
+  /* Remove decorative styling that can distort on mobile */
+  border: 0;
+  border-radius: 0;
+  max-width: none;
+  max-height: none;
+}
+
+/* Optional UI container (cards/buttons outside the camera) */
 .container {
-    background: white;
-    border-radius: 20px;
-    padding: 2rem;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-    max-width: 800px;
-    width: 90%;
+  position: relative;
+  z-index: 2;               /* keep above canvas if used */
+  background: #111;
+  border-radius: 16px;
+  padding: 1rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+  max-width: 800px;
+  width: 90%;
+  margin: 1rem auto;
 }
 
 h1 {
-    text-align: center;
-    color: #333;
-    margin-bottom: 2rem;
-    font-size: 2.5rem;
-    background: linear-gradient(45deg, #667eea, #764ba2);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  text-align: center;
+  color: #fff;
+  margin-bottom: 1rem;
 }
 
-.camera-container {
-    position: relative;
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto 2rem;
-    border-radius: 15px;
-    overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-}
-
-#videoElement, #canvasElement, #canvas {
-    width: 100%;
-    height: auto;
-    display: block;
-    background: #000; /* Black background to make it visible */
-    border: 2px solid #ddd;
-    border-radius: 10px;
-}
-
-#canvasElement {
-    position: absolute;
-    top: 0;
-    left: 0;
-    display: none;
-}
-
-/* Ensure canvas is visible and properly sized */
-#canvas {
-    max-width: 640px;
-    max-height: 480px;
-    margin: 0 auto;
-}
+/* Controls overlay (hidden in your setup; keep styles minimal) */
 .controls {
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
+  position: absolute;
+  inset: auto 0 0 0;
+  display: none;
+  justify-content: space-around;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0.4), transparent);
+  z-index: 3;
 }
 
-.controls button {
-    background: linear-gradient(45deg, #667eea, #764ba2);
-    color: white;
-    border: none;
-    padding: 12px 24px;
-    border-radius: 25px;
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+button {
+  background: rgba(255,255,255,0.18);
+  border: 2px solid rgba(255,255,255,0.28);
+  color: white;
+  border-radius: 50%;
+  width: 60px; height: 60px;
+  cursor: pointer;
+  transition: transform .2s ease;
+  display: flex; align-items: center; justify-content: center;
 }
+button:hover, button:active { transform: scale(1.05); }
+button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 
-.controls button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-}
-
-.controls button:active {
-    transform: translateY(0);
-}
-
-.controls button:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
-}
-
-#lensContainer {
-    background: #f8f9fa;
-    border-radius: 10px;
-    padding: 1.5rem;
-    text-align: center;
-    color: #666;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-    .container {
-        padding: 1rem;
-    }
-    
-    h1 {
-        font-size: 2rem;
-    }
-    
-    .controls {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .controls button {
-        width: 200px;
-    }
+/* Small screens */
+@media (max-width: 360px) {
+  button { width: 52px; height: 52px; }
+  .controls { padding: 14px; }
 }

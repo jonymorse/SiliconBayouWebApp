@@ -52,7 +52,11 @@ class SnapLensProper {
             this.liveCanvas.style.display = "block";
             
             // Adjust backing-store size to avoid oversized UI
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            || (/Macintosh/.test(navigator.userAgent) && 'ontouchend' in document);
+            const dpr = isiOS ? 1 : Math.min(window.devicePixelRatio || 1, 2);
+          
+
             const resizeLiveCanvas = () => {
                 const rect = this.liveCanvas.getBoundingClientRect();
                 this.liveCanvas.width = Math.round(rect.width * dpr);
