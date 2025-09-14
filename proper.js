@@ -2,7 +2,7 @@ import { bootstrapCameraKit, createMediaStreamSource, Transform2D } from '@snap/
 
 const LENS_CONFIG = {
     API_TOKEN: 'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M',
-    LENS_ID: '96460356-a721-446e-873a-5c5a2140ed20',
+    LENS_ID: '4a0ae680-1f29-4d6f-8964-ef46faa7530f',
     LENS_GROUP_ID: '1d5338a5-2299-44e8-b41d-e69573824971'
 };
 
