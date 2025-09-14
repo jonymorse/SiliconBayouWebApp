@@ -131,7 +131,7 @@ class SnapLensProper {
         }
 
         this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        const source = createMediaStreamSource(this.mediaStream);
+        const source = createMediaStreamSource(this.mediaStream, {cameraType: wantFront ? 'user' : 'environment'});
         await this.session.setSource(source);
 
         if (wantFront) source.setTransform(Transform2D.MirrorX);
