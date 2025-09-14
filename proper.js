@@ -80,39 +80,40 @@ class SnapLensProper {
         }
     }
     
+    // ✅ Replace your startCamera with this (no play/apply here)
     async startCamera() {
-        try {
-            this.updateStatus('Starting camera...');
-            
-            // Original camera constraints - keeping your rendering approach
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { 
-                    width: { ideal: 640, max: 1280 },
-                    height: { ideal: 480, max: 720 },
-                    facingMode: { exact: this.currentFacingMode },
-                    frameRate: { ideal: 30, max: 30 }
-                }
-            });
-            
-            const source = createMediaStreamSource(this.mediaStream);
-            await this.session.setSource(source);
-            
-            if (this.currentFacingMode === 'user') {
-                source.setTransform(Transform2D.MirrorX);
-            }
-            
-            this.session.play("live");
-            this.updateStatus('Camera ready!');
-            
-        } catch (error) {
-            console.error('Camera failed:', error);
-            if (error.name === 'OverconstrainedError') {
-                this.tryFallbackCamera();
-            } else {
-                this.updateStatus('Camera unavailable');
-            }
-        }
-    }    
+    this.updateStatus('Starting camera...');
+
+    // Try to prefer deviceId, fallback to facingMode
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+    const pickDeviceId = (wantFront) => {
+        const hit = videoDevices.find(d =>
+        wantFront ? /front/i.test(d.label) : /back|rear|environment/i.test(d.label)
+        );
+        return hit?.deviceId;
+    };
+    const wantFront = this.currentFacingMode === 'user';
+    const deviceId = pickDeviceId(wantFront);
+
+    const constraints = {
+        video: deviceId ? { deviceId: { exact: deviceId } }
+                        : { facingMode: wantFront ? 'user' : 'environment' },
+        audio: false
+    };
+
+    this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    const source = createMediaStreamSource(this.mediaStream);
+    await this.session.setSource(source);
+
+    // Mirror for front camera (do it on the source)
+    if (wantFront) source.setTransform(Transform2D.MirrorX);
+
+    this.updateStatus('Camera ready!');
+    return source;
+    }
+    
     async tryFallbackCamera() {
         try {
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -134,26 +135,45 @@ class SnapLensProper {
         }
     }
     
-    async switchCamera() {
-        if (!this.session) return;
-        
-        try {
-            if (this.mediaStream) {
-                this.mediaStream.getTracks().forEach(track => track.stop());
-            }
-            
-            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            await this.startCamera();
-            
-            if (this.lensActive && this.currentLens) {
-                await this.session.applyLens(this.currentLens);
-            }
-            
-        } catch (error) {
-            console.error('Switch failed:', error);
-            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-        }
-    }    
+// ✅ Replace your switchCamera with this (proper order: pause → stop → setSource → applyLens → play)
+async switchCamera() {
+  if (!this.session) return;
+
+  try {
+    // Pause rendering to avoid race conditions
+    await this.session.pause();
+
+    // Stop prior tracks
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(t => t.stop());
+      this.mediaStream = null;
+    }
+
+    // Flip desired camera
+    this.currentFacingMode = (this.currentFacingMode === 'user') ? 'environment' : 'user';
+
+    // New stream + source
+    await this.startCamera();
+
+    // Re-apply lens BEFORE playing, so tracking resets with the new source
+    if (this.lensActive && this.currentLens) {
+      await this.session.applyLens(this.currentLens);
+    }
+
+    // Resume rendering
+    await this.session.play();
+
+    // (Optional) If your SDK has mirroring API, set it here; otherwise keep your CSS approach.
+    // this.session.setRenderMirroring?.(this.currentFacingMode === 'user');
+
+  } catch (error) {
+    console.error('Switch failed:', error);
+    // revert toggle on failure
+    this.currentFacingMode = (this.currentFacingMode === 'user') ? 'environment' : 'user';
+    this.updateStatus('Camera switch failed');
+  }
+}
+
     async toggleLens() {
         if (!this.session) return;
         
@@ -192,20 +212,29 @@ class SnapLensProper {
             this.updateStatus('Auto-start failed');
         }
     }    
-    setupDoubleTapGesture() {
-        const cameraContainer = document.querySelector('.camera-container');
-        
-        cameraContainer.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            this.handleDoubleTap();
-        });
-        
-        cameraContainer.addEventListener('click', (e) => {
-            if (!e.target.closest('button')) {
-                this.handleDoubleTap();
-            }
-        });
-    }
+// ✅ Small tweak: initialize once, then apply lens, then play
+async autoStartWithLens() {
+  try {
+    this.updateStatus('Auto-starting...');
+    await this.startCamera();
+
+    // Load & apply lens first…
+    this.currentLens = await this.cameraKit.lensRepository.loadLens(
+      LENS_CONFIG.LENS_ID, 
+      LENS_CONFIG.LENS_GROUP_ID
+    );
+    await this.session.applyLens(this.currentLens);
+    this.lensActive = true;
+
+    // …then play
+    await this.session.play();
+    this.updateStatus('AR active!');
+  } catch (error) {
+    console.error('Auto-start failed:', error);
+    this.updateStatus('Auto-start failed');
+  }
+}
+
     
     setupBackgroundAudio() {
         if (!this.backgroundAudio) {
