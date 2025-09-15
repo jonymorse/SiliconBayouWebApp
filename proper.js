@@ -19,21 +19,19 @@ class SnapLensProper {
         this.tapTimeout = null;
         this.backgroundAudio = document.getElementById('backgroundAudio');
         
-        // Add new properties for world tracking
-        this.worldTrackingEnabled = false;
-        this.motionPermissionGranted = false;
-        this.isInitializing = false;
+        // Enhanced properties for better world tracking
+        this.isSwitching = false;
+        this.motionPermissionRequested = false;
+        this.sessionStabilized = false;
         
         this.initializeApp();
     }
     
     async initializeApp() {
+        // Remove button event listeners since buttons are hidden
         this.setupDoubleTapGesture();
         this.setupBackgroundAudio();
         await this.initializeCameraKit();
-        
-        // Don't request motion permissions until after camera starts
-        // This helps ensure we have user interaction context
         await this.autoStartWithLens();
     }    
     async initializeCameraKit() {
@@ -42,24 +40,21 @@ class SnapLensProper {
             this.cameraKit = await bootstrapCameraKit({ apiToken: LENS_CONFIG.API_TOKEN });
             this.session = await this.cameraKit.createSession();
             
-            // Enhanced error handling
             this.session.events.addEventListener("error", (event) => {
                 console.error('Camera Kit error:', event.detail);
                 this.updateStatus(`Error: ${event.detail}`);
             });
 
-            // ADD: Listen for world tracking events
-            this.session.events.addEventListener("lens_loading", () => {
-                console.log('Lens loading...');
+            // Add session state listeners for better debugging
+            this.session.events.addEventListener("camera_input_started", () => {
+                console.log('📹 Camera input started');
+                this.sessionStabilized = false;
+                // Give some time for session to stabilize
+                setTimeout(() => {
+                    this.sessionStabilized = true;
+                    console.log('✅ Session stabilized');
+                }, 1000);
             });
-
-            this.session.events.addEventListener("lens_loaded", () => {
-                console.log('Lens loaded successfully');
-                this.checkWorldTrackingState();
-            });
-
-            // Request motion permissions early (iOS)
-            // NOTE: Moved to after camera starts for better user interaction context
             
             this.outputContainer.replaceWith(this.session.output.live);
             this.liveCanvas = this.session.output.live;
@@ -101,108 +96,61 @@ class SnapLensProper {
         }
     }
     
-    // CORRECTED: Motion permission handling
+    // Enhanced motion permission request
     async requestMotionPermissions() {
-        console.log('Checking motion permissions...');
+        if (this.motionPermissionRequested) return;
         
-        // Check if we're on iOS and DeviceOrientationEvent.requestPermission exists
+        console.log('🔄 Requesting motion permissions for better world tracking...');
+        
         if (typeof DeviceOrientationEvent !== 'undefined' && 
             typeof DeviceOrientationEvent.requestPermission === 'function') {
             
             try {
-                console.log('Requesting iOS motion permission...');
+                this.updateStatus('Requesting motion access...');
                 const permission = await DeviceOrientationEvent.requestPermission();
                 console.log('Motion permission result:', permission);
                 
-                this.motionPermissionGranted = permission === 'granted';
-                
-                if (this.motionPermissionGranted) {
-                    this.worldTrackingEnabled = true;
-                    console.log('✅ Motion permission granted - world tracking enabled');
+                if (permission === 'granted') {
+                    console.log('✅ Motion permission granted - world tracking should be more stable');
+                    this.updateStatus('Motion access granted!');
+                    
+                    // If we're on back camera with lens active, restart for better tracking
+                    if (this.lensActive && this.currentFacingMode === 'environment') {
+                        setTimeout(async () => {
+                            await this.restabilizeWorldTracking();
+                        }, 500);
+                    }
                 } else {
                     console.log('❌ Motion permission denied');
-                    this.showMotionPermissionHelp();
+                    this.updateStatus('Motion access denied');
                 }
                 
+                this.motionPermissionRequested = true;
                 return permission;
             } catch (error) {
                 console.error('Motion permission request failed:', error);
                 return 'denied';
             }
         } else {
-            // Non-iOS or older iOS - assume granted
-            console.log('Non-iOS device or older iOS - assuming motion permission granted');
-            this.motionPermissionGranted = true;
-            this.worldTrackingEnabled = true;
+            // Non-iOS device
+            console.log('Motion permissions not required on this device');
+            this.motionPermissionRequested = true;
             return 'granted';
         }
     }
 
-    // NEW: Manual motion permission trigger with user interaction
-    async triggerMotionPermissionDialog() {
-        console.log('🔄 Manually triggering motion permission dialog...');
-        
-        // This MUST be called from a user interaction event
-        if (typeof DeviceOrientationEvent !== 'undefined' && 
-            typeof DeviceOrientationEvent.requestPermission === 'function') {
-            
-            try {
-                // Show status to user
-                this.updateStatus('Requesting motion access...');
-                
-                const permission = await DeviceOrientationEvent.requestPermission();
-                console.log('Manual motion permission result:', permission);
-                
-                this.motionPermissionGranted = permission === 'granted';
-                this.worldTrackingEnabled = permission === 'granted';
-                
-                if (permission === 'granted') {
-                    this.updateStatus('Motion access granted!');
-                    console.log('✅ Manual motion permission successful');
-                    
-                    // If we have an active lens on back camera, restart it for better tracking
-                    if (this.lensActive && this.currentFacingMode === 'environment') {
-                        console.log('Restarting lens with motion permissions...');
-                        await this.restartLensForBetterTracking();
-                    }
-                } else {
-                    this.updateStatus('Motion access denied');
-                    console.log('❌ Manual motion permission denied');
-                }
-                
-                return permission;
-            } catch (error) {
-                console.error('Manual motion permission failed:', error);
-                this.updateStatus('Motion permission failed');
-                return 'denied';
-            }
-        } else {
-            console.log('DeviceOrientationEvent.requestPermission not available');
-            this.updateStatus('Motion permissions not needed');
-            return 'granted';
-        }
-    }
-
-    // NEW: Show help message about motion permissions
-    showMotionPermissionHelp() {
-        console.log('📱 Motion Permission Help:');
-        console.log('1. If you see the permission dialog, tap "Allow"');
-        console.log('2. If denied, go to Safari Settings > Motion & Orientation');
-        console.log('3. Or reload the page and allow when prompted');
-    }
-
-    // NEW: Restart lens with better tracking after motion permission
-    async restartLensForBetterTracking() {
-        if (!this.session || !this.currentLens) return;
+    // New method to restabilize world tracking
+    async restabilizeWorldTracking() {
+        if (!this.session || !this.currentLens || this.currentFacingMode !== 'environment') return;
         
         try {
-            console.log('Restarting lens for better world tracking...');
+            console.log('🔧 Restabilizing world tracking...');
             
             // Clear current lens
             await this.session.clearLens();
             
             // Wait for cleanup
-            await new Promise(resolve => setTimeout(resolve, 200));
+            await new Promise(resolve => setTimeout(resolve, 300));
             
             // Reapply lens
             await this.session.applyLens(this.currentLens);
@@ -210,11 +158,11 @@ class SnapLensProper {
             // Extra stabilization time
             await new Promise(resolve => setTimeout(resolve, 800));
             
-            console.log('Lens restarted with motion permissions');
-            this.updateStatus('AR stabilized!');
+            console.log('✅ World tracking restabilized');
+            this.updateStatus('AR tracking optimized!');
             
         } catch (error) {
-            console.error('Failed to restart lens:', error);
+            console.error('Failed to restabilize world tracking:', error);
         }
     }
     
@@ -250,7 +198,7 @@ class SnapLensProper {
                 this.updateStatus('Camera unavailable');
             }
         }
-    }    
+    }
     async tryFallbackCamera() {
         try {
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -272,116 +220,132 @@ class SnapLensProper {
         }
     }
     
-    // ENHANCED: Better camera switching with state preservation
+    // Enhanced camera switching with world tracking considerations
     async switchCamera() {
-        if (!this.session || this.isInitializing) return;
+        if (!this.session || this.isSwitching) {
+            console.log('⏳ Camera switch already in progress or session not ready');
+            return;
+        }
         
-        this.isInitializing = true;
+        this.isSwitching = true;
+        console.log('🔄 Starting enhanced camera switch...');
         
         try {
-            console.log('Starting camera switch...');
-            
-            // Store current lens state BEFORE stopping camera
+            // Store current state
             const wasLensActive = this.lensActive;
             const currentLensRef = this.currentLens;
+            const oldFacingMode = this.currentFacingMode;
             
-            // Stop current stream
+            this.updateStatus('Switching camera...');
+            
+            // Step 1: Properly pause session if possible
+            try {
+                if (this.session.pause) {
+                    await this.session.pause();
+                    console.log('📱 Session paused');
+                }
+            } catch (error) {
+                console.log('Session pause not available, continuing...');
+            }
+            
+            // Step 2: Clean up current state
+            if (wasLensActive) {
+                try {
+                    await this.session.clearLens();
+                    console.log('🧹 Lens cleared');
+                } catch (error) {
+                    console.log('Lens clear failed, continuing...');
+                }
+            }
+            
+            // Step 3: Stop media stream
             if (this.mediaStream) {
                 this.mediaStream.getTracks().forEach(track => track.stop());
                 this.mediaStream = null;
+                console.log('📹 Media stream stopped');
             }
-
-            // Switch facing mode
+            
+            // Step 4: Wait for cleanup
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Step 5: Switch facing mode
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            console.log('Switched to:', this.currentFacingMode);
-
-            // IMPORTANT: Small delay to let the previous stream fully release
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            // Restart camera with new facing mode
+            console.log(`📱 Switched from ${oldFacingMode} to ${this.currentFacingMode}`);
+            
+            // Step 6: Restart camera
             await this.startCamera();
-
-            // CRITICAL: Wait for camera to stabilize before reapplying lens
-            await new Promise(resolve => setTimeout(resolve, 300));
-
-            // Reapply lens if it was active, but with world tracking considerations
+            console.log('📹 Camera restarted');
+            
+            // Step 7: Wait for session to stabilize
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Step 8: Reapply lens with enhanced world tracking
             if (wasLensActive && currentLensRef) {
-                await this.reapplyLensWithWorldTracking(currentLensRef);
+                await this.reapplyLensWithStabilization(currentLensRef);
             }
-
+            
+            // Step 9: Request motion permissions if switching to back camera
+            if (this.currentFacingMode === 'environment' && !this.motionPermissionRequested) {
+                setTimeout(async () => {
+                    await this.requestMotionPermissions();
+                }, 1000);
+            }
+            
+            console.log('✅ Camera switch completed successfully');
+            this.updateStatus('Camera switched!');
+            
         } catch (error) {
-            console.error('Switch failed:', error);
+            console.error('❌ Camera switch failed:', error);
+            
             // Revert facing mode on failure
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            this.updateStatus('Switch failed');
+            this.updateStatus('Switch failed, retrying...');
+            
+            // Try to recover
+            try {
+                await this.startCamera();
+            } catch (recoveryError) {
+                console.error('Recovery failed:', recoveryError);
+                this.updateStatus('Camera error');
+            }
         } finally {
-            this.isInitializing = false;
+            this.isSwitching = false;
         }
     }
-    
-    // NEW: Reapply lens with proper world tracking setup
-    async reapplyLensWithWorldTracking(lensRef) {
+
+    // New method for lens reapplication with stabilization
+    async reapplyLensWithStabilization(lensRef) {
         try {
-            console.log('Reapplying lens with world tracking...');
+            console.log('🎭 Reapplying lens with stabilization...');
             
-            // Clear any existing lens first
-            await this.session.clearLens();
-            
-            // Small delay for cleanup
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // For back camera (environment), ensure world tracking is ready
+            // For environment camera, add extra stabilization
             if (this.currentFacingMode === 'environment') {
-                await this.ensureWorldTrackingReady();
+                console.log('🌍 Environment camera detected - adding world tracking stabilization');
+                await new Promise(resolve => setTimeout(resolve, 800));
             }
             
             // Apply the lens
             await this.session.applyLens(lensRef);
             this.lensActive = true;
             
-            // Additional stabilization time for world tracking
+            // Additional stabilization for world tracking
             if (this.currentFacingMode === 'environment') {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                this.checkWorldTrackingState();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                console.log('🎯 World tracking stabilization complete');
             }
             
-            console.log('Lens reapplied successfully');
+            console.log('✅ Lens reapplied successfully');
             this.updateStatus('AR active!');
             
         } catch (error) {
-            console.error('Failed to reapply lens:', error);
+            console.error('❌ Failed to reapply lens:', error);
             this.lensActive = false;
             this.updateStatus('Lens reapply failed');
         }
-    }
-
-    // NEW: Ensure world tracking is ready before lens application
-    async ensureWorldTrackingReady() {
-        if (!this.worldTrackingEnabled) {
-            console.log('World tracking not enabled, requesting permissions...');
-            await this.requestMotionPermissions();
-        }
-
-        // Give world tracking time to initialize
-        if (this.currentFacingMode === 'environment') {
-            console.log('Waiting for world tracking to stabilize...');
-            await new Promise(resolve => setTimeout(resolve, 800));
-        }
-    }
-
-    // NEW: Check and log world tracking state
-    checkWorldTrackingState() {
-        if (this.currentFacingMode === 'environment') {
-            console.log('World tracking state:', {
-                motionPermissionGranted: this.motionPermissionGranted,
-                worldTrackingEnabled: this.worldTrackingEnabled,
-                facingMode: this.currentFacingMode
-            });
-        }
     }    
-    // ENHANCED: Better lens toggle with world tracking
+    // Enhanced lens toggle with better world tracking
     async toggleLens() {
-        if (!this.session || this.isInitializing) return;
+        if (!this.session) return;
         
         try {
             if (this.lensActive && this.currentLens) {
@@ -392,26 +356,19 @@ class SnapLensProper {
             } else {
                 this.updateStatus('Loading lens...');
                 
-                // Ensure world tracking is ready for environment camera
-                if (this.currentFacingMode === 'environment') {
-                    await this.ensureWorldTrackingReady();
+                // Request motion permissions first if on back camera
+                if (this.currentFacingMode === 'environment' && !this.motionPermissionRequested) {
+                    await this.requestMotionPermissions();
                 }
                 
+                // Load lens
                 this.currentLens = await this.cameraKit.lensRepository.loadLens(
                     LENS_CONFIG.LENS_ID, 
                     LENS_CONFIG.LENS_GROUP_ID
                 );
                 
-                await this.session.applyLens(this.currentLens);
-                this.lensActive = true;
-                
-                // Additional stabilization for world tracking
-                if (this.currentFacingMode === 'environment') {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    this.checkWorldTrackingState();
-                }
-                
-                this.updateStatus('AR active!');
+                // Apply with stabilization
+                await this.reapplyLensWithStabilization(this.currentLens);
             }
         } catch (error) {
             console.error('Lens error:', error);
@@ -421,7 +378,7 @@ class SnapLensProper {
         }
     }
     
-    // ENHANCED: Auto-start that includes motion permission check
+    // Enhanced auto-start with motion permission timing
     async autoStartWithLens() {
         try {
             this.updateStatus('Auto-starting...');
@@ -430,76 +387,32 @@ class SnapLensProper {
             // Wait for camera to stabilize
             await new Promise(resolve => setTimeout(resolve, 1000));
             
-            // Check motion permissions after camera is ready
-            console.log('Checking motion permissions after camera start...');
-            await this.requestMotionPermissions();
-            
-            // Apply lens
+            // Apply lens first
             await this.toggleLens();
             
-            // Show instruction to user about triple tap
-            setTimeout(() => {
-                console.log('💡 Tip: Triple-tap to request motion permissions for better AR tracking');
-            }, 3000);
+            // Then request motion permissions after lens is active (better UX)
+            if (this.currentFacingMode === 'environment') {
+                setTimeout(async () => {
+                    await this.requestMotionPermissions();
+                }, 2000); // Give user time to see the AR working first
+            }
             
         } catch (error) {
             console.error('Auto-start failed:', error);
             this.updateStatus('Auto-start failed');
         }
     }    
-    // ENHANCED: Setup gesture that can also trigger motion permissions
     setupDoubleTapGesture() {
         const cameraContainer = document.querySelector('.camera-container');
         
-        // Track taps for motion permission
-        let tapCount = 0;
-        let tapTimer = null;
-        
-        const handleTap = async (e) => {
+        cameraContainer.addEventListener('touchend', (e) => {
             e.preventDefault();
-            
-            tapCount++;
-            
-            // Clear existing timer
-            if (tapTimer) {
-                clearTimeout(tapTimer);
-            }
-            
-            // Set timer to reset tap count
-            tapTimer = setTimeout(() => {
-                tapCount = 0;
-            }, 500);
-            
-            if (tapCount === 2) {
-                // Double tap - switch camera
-                console.log('Double tap detected - switching camera');
-                this.handleDoubleTap();
-                tapCount = 0;
-            } else if (tapCount === 3) {
-                // Triple tap - request motion permissions
-                console.log('Triple tap detected - requesting motion permissions');
-                await this.triggerMotionPermissionDialog();
-                tapCount = 0;
-            }
-        };
-        
-        cameraContainer.addEventListener('touchend', handleTap);
-        cameraContainer.addEventListener('click', handleTap);
-        
-        // Also add a long press for motion permissions
-        let longPressTimer = null;
-        
-        cameraContainer.addEventListener('touchstart', (e) => {
-            longPressTimer = setTimeout(async () => {
-                console.log('Long press detected - requesting motion permissions');
-                await this.triggerMotionPermissionDialog();
-            }, 1000); // 1 second long press
+            this.handleDoubleTap();
         });
         
-        cameraContainer.addEventListener('touchend', () => {
-            if (longPressTimer) {
-                clearTimeout(longPressTimer);
-                longPressTimer = null;
+        cameraContainer.addEventListener('click', (e) => {
+            if (!e.target.closest('button')) {
+                this.handleDoubleTap();
             }
         });
     }
@@ -546,7 +459,7 @@ class SnapLensProper {
         });
     }
     
-    // ENHANCED: Better double-tap handling with debouncing
+    // Enhanced double-tap with debouncing and switch protection
     handleDoubleTap() {
         const currentTime = Date.now();
         const tapLength = currentTime - this.lastTap;
@@ -557,12 +470,14 @@ class SnapLensProper {
         }
         
         if (tapLength < 300 && tapLength > 0) {
-            // Prevent rapid switching
-            if (!this.isInitializing) {
-                this.switchCamera();
-            } else {
-                console.log('Camera switch already in progress...');
+            // Double tap detected
+            if (this.isSwitching) {
+                console.log('⏳ Camera switch in progress, ignoring double tap');
+                return;
             }
+            
+            console.log('👆 Double tap detected - switching camera');
+            this.switchCamera();
             this.lastTap = 0;
         } else {
             this.lastTap = currentTime;
