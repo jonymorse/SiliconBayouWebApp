@@ -164,82 +164,116 @@ class SnapLensProper {
         }
     }
     
-    // Enhanced camera switching to prevent iOS freezing
+    // Session reset approach to restore world tracking
     async switchCamera() {
         if (!this.session) return;
         
         try {
-            console.log('📱 Starting camera switch...');
+            console.log('📱 Starting camera switch with session reset...');
             this.updateStatus('Switching camera...');
             
             // Store lens state
             const wasLensActive = this.lensActive;
             const currentLensRef = this.currentLens;
             
-            // CRITICAL: Clear lens BEFORE stopping camera to prevent freezing
+            // Step 1: Clear lens
             if (wasLensActive) {
-                console.log('🎭 Clearing lens before camera switch...');
+                console.log('🎭 Clearing lens...');
                 await this.session.clearLens();
                 this.lensActive = false;
             }
             
-            // CRITICAL: Stop all tracks properly as per iOS requirements
+            // Step 2: Stop all tracks
             if (this.mediaStream) {
                 console.log('🔴 Stopping all media tracks...');
                 this.mediaStream.getTracks().forEach(track => {
-                    console.log(`Stopping track: ${track.kind} - ${track.label}`);
                     track.stop();
                 });
                 this.mediaStream = null;
             }
             
-            // Wait for cleanup to complete (critical for iOS)
-            console.log('⏳ Waiting for stream cleanup...');
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // Step 3: DESTROY AND RECREATE SESSION (key fix!)
+            console.log('💥 Destroying current session...');
+            try {
+                if (this.session.destroy) {
+                    await this.session.destroy();
+                }
+            } catch (destroyError) {
+                console.log('Session destroy not available, continuing...');
+            }
             
-            // Switch facing mode
+            // Step 4: Switch facing mode
             const oldMode = this.currentFacingMode;
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
             console.log(`🔄 Switching from ${oldMode} to ${this.currentFacingMode}`);
             
-            // Start new camera with iOS-compatible approach
-            await this.startCamera();
-            
-            // Wait for camera to stabilize
-            console.log('⏳ Waiting for camera stabilization...');
+            // Step 5: Wait for cleanup
+            console.log('⏳ Waiting for complete cleanup...');
             await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Reapply lens if it was active
+            // Step 6: CREATE FRESH SESSION (restore world tracking state!)
+            console.log('🆕 Creating fresh Camera Kit session...');
+            this.session = await this.cameraKit.createSession();
+            
+            // Re-attach error listeners
+            this.session.events.addEventListener("error", (event) => {
+                console.error('Camera Kit error:', event.detail);
+                this.updateStatus(`Error: ${event.detail}`);
+            });
+            
+            // Replace canvas output
+            if (this.liveCanvas) {
+                this.liveCanvas.replaceWith(this.session.output.live);
+            } else {
+                this.outputContainer.replaceWith(this.session.output.live);
+            }
+            
+            this.liveCanvas = this.session.output.live;
+            this.liveCanvas.id = 'live-canvas';
+            this.liveCanvas.style.width = "100%";
+            this.liveCanvas.style.height = "100%";
+            this.liveCanvas.style.objectFit = "cover";
+            this.liveCanvas.style.background = "#000";
+            this.liveCanvas.style.display = "block";
+            
+            console.log('✅ Fresh session created');
+            
+            // Step 7: Start camera with fresh session
+            await this.startCamera();
+            
+            // Step 8: Wait for world tracking to stabilize
+            console.log('⏳ Waiting for world tracking stabilization...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Step 9: Reapply lens to fresh session
             if (wasLensActive && currentLensRef) {
-                console.log('🎭 Reapplying lens after camera switch...');
+                console.log('🎭 Reapplying lens to fresh session...');
                 try {
-                    await this.session.applyLens(currentLensRef);
+                    // Reload lens on fresh session
+                    this.currentLens = await this.cameraKit.lensRepository.loadLens(
+                        LENS_CONFIG.LENS_ID, 
+                        LENS_CONFIG.LENS_GROUP_ID
+                    );
+                    await this.session.applyLens(this.currentLens);
                     this.lensActive = true;
-                    this.updateStatus('AR active!');
+                    
+                    // Extra time for world tracking with lens
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                    
+                    this.updateStatus('AR active with fresh tracking!');
                 } catch (lensError) {
                     console.error('❌ Failed to reapply lens:', lensError);
                     this.updateStatus('Camera switched, lens failed');
                 }
             } else {
-                this.updateStatus('Camera switched!');
+                this.updateStatus('Camera switched with fresh tracking!');
             }
             
-            console.log('✅ Camera switch completed successfully');
+            console.log('✅ Camera switch with session reset completed');
             
         } catch (error) {
-            console.error('❌ Camera switch failed:', error);
-            
-            // Try to recover by reverting facing mode
-            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            this.updateStatus('Switch failed, trying to recover...');
-            
-            try {
-                await this.startCamera();
-                this.updateStatus('Recovered to original camera');
-            } catch (recoveryError) {
-                console.error('❌ Recovery also failed:', recoveryError);
-                this.updateStatus('Camera error - please refresh');
-            }
+            console.error('❌ Camera switch with session reset failed:', error);
+            this.updateStatus('Switch failed - please refresh page');
         }
     }
     async toggleLens() {
