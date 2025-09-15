@@ -28,10 +28,12 @@ class SnapLensProper {
     }
     
     async initializeApp() {
-        // Remove button event listeners since buttons are hidden
         this.setupDoubleTapGesture();
         this.setupBackgroundAudio();
         await this.initializeCameraKit();
+        
+        // Don't request motion permissions until after camera starts
+        // This helps ensure we have user interaction context
         await this.autoStartWithLens();
     }    
     async initializeCameraKit() {
@@ -57,7 +59,7 @@ class SnapLensProper {
             });
 
             // Request motion permissions early (iOS)
-            await this.requestMotionPermissions();
+            // NOTE: Moved to after camera starts for better user interaction context
             
             this.outputContainer.replaceWith(this.session.output.live);
             this.liveCanvas = this.session.output.live;
@@ -99,25 +101,120 @@ class SnapLensProper {
         }
     }
     
-    // NEW: Request motion permissions proactively
+    // CORRECTED: Motion permission handling
     async requestMotionPermissions() {
+        console.log('Checking motion permissions...');
+        
+        // Check if we're on iOS and DeviceOrientationEvent.requestPermission exists
         if (typeof DeviceOrientationEvent !== 'undefined' && 
             typeof DeviceOrientationEvent.requestPermission === 'function') {
+            
             try {
+                console.log('Requesting iOS motion permission...');
                 const permission = await DeviceOrientationEvent.requestPermission();
+                console.log('Motion permission result:', permission);
+                
                 this.motionPermissionGranted = permission === 'granted';
-                console.log('Motion permission:', permission);
                 
                 if (this.motionPermissionGranted) {
                     this.worldTrackingEnabled = true;
+                    console.log('✅ Motion permission granted - world tracking enabled');
+                } else {
+                    console.log('❌ Motion permission denied');
+                    this.showMotionPermissionHelp();
                 }
+                
+                return permission;
             } catch (error) {
-                console.warn('Motion permission request failed:', error);
+                console.error('Motion permission request failed:', error);
+                return 'denied';
             }
         } else {
             // Non-iOS or older iOS - assume granted
+            console.log('Non-iOS device or older iOS - assuming motion permission granted');
             this.motionPermissionGranted = true;
             this.worldTrackingEnabled = true;
+            return 'granted';
+        }
+    }
+
+    // NEW: Manual motion permission trigger with user interaction
+    async triggerMotionPermissionDialog() {
+        console.log('🔄 Manually triggering motion permission dialog...');
+        
+        // This MUST be called from a user interaction event
+        if (typeof DeviceOrientationEvent !== 'undefined' && 
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            
+            try {
+                // Show status to user
+                this.updateStatus('Requesting motion access...');
+                
+                const permission = await DeviceOrientationEvent.requestPermission();
+                console.log('Manual motion permission result:', permission);
+                
+                this.motionPermissionGranted = permission === 'granted';
+                this.worldTrackingEnabled = permission === 'granted';
+                
+                if (permission === 'granted') {
+                    this.updateStatus('Motion access granted!');
+                    console.log('✅ Manual motion permission successful');
+                    
+                    // If we have an active lens on back camera, restart it for better tracking
+                    if (this.lensActive && this.currentFacingMode === 'environment') {
+                        console.log('Restarting lens with motion permissions...');
+                        await this.restartLensForBetterTracking();
+                    }
+                } else {
+                    this.updateStatus('Motion access denied');
+                    console.log('❌ Manual motion permission denied');
+                }
+                
+                return permission;
+            } catch (error) {
+                console.error('Manual motion permission failed:', error);
+                this.updateStatus('Motion permission failed');
+                return 'denied';
+            }
+        } else {
+            console.log('DeviceOrientationEvent.requestPermission not available');
+            this.updateStatus('Motion permissions not needed');
+            return 'granted';
+        }
+    }
+
+    // NEW: Show help message about motion permissions
+    showMotionPermissionHelp() {
+        console.log('📱 Motion Permission Help:');
+        console.log('1. If you see the permission dialog, tap "Allow"');
+        console.log('2. If denied, go to Safari Settings > Motion & Orientation');
+        console.log('3. Or reload the page and allow when prompted');
+    }
+
+    // NEW: Restart lens with better tracking after motion permission
+    async restartLensForBetterTracking() {
+        if (!this.session || !this.currentLens) return;
+        
+        try {
+            console.log('Restarting lens for better world tracking...');
+            
+            // Clear current lens
+            await this.session.clearLens();
+            
+            // Wait for cleanup
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // Reapply lens
+            await this.session.applyLens(this.currentLens);
+            
+            // Extra stabilization time
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            console.log('Lens restarted with motion permissions');
+            this.updateStatus('AR stabilized!');
+            
+        } catch (error) {
+            console.error('Failed to restart lens:', error);
         }
     }
     
@@ -324,32 +421,85 @@ class SnapLensProper {
         }
     }
     
-    // ENHANCED: Auto-start with proper world tracking setup
+    // ENHANCED: Auto-start that includes motion permission check
     async autoStartWithLens() {
         try {
             this.updateStatus('Auto-starting...');
             await this.startCamera();
             
-            // Longer delay for initial world tracking setup
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Wait for camera to stabilize
+            await new Promise(resolve => setTimeout(resolve, 1000));
             
+            // Check motion permissions after camera is ready
+            console.log('Checking motion permissions after camera start...');
+            await this.requestMotionPermissions();
+            
+            // Apply lens
             await this.toggleLens();
+            
+            // Show instruction to user about triple tap
+            setTimeout(() => {
+                console.log('💡 Tip: Triple-tap to request motion permissions for better AR tracking');
+            }, 3000);
+            
         } catch (error) {
             console.error('Auto-start failed:', error);
             this.updateStatus('Auto-start failed');
         }
     }    
+    // ENHANCED: Setup gesture that can also trigger motion permissions
     setupDoubleTapGesture() {
         const cameraContainer = document.querySelector('.camera-container');
         
-        cameraContainer.addEventListener('touchend', (e) => {
+        // Track taps for motion permission
+        let tapCount = 0;
+        let tapTimer = null;
+        
+        const handleTap = async (e) => {
             e.preventDefault();
-            this.handleDoubleTap();
+            
+            tapCount++;
+            
+            // Clear existing timer
+            if (tapTimer) {
+                clearTimeout(tapTimer);
+            }
+            
+            // Set timer to reset tap count
+            tapTimer = setTimeout(() => {
+                tapCount = 0;
+            }, 500);
+            
+            if (tapCount === 2) {
+                // Double tap - switch camera
+                console.log('Double tap detected - switching camera');
+                this.handleDoubleTap();
+                tapCount = 0;
+            } else if (tapCount === 3) {
+                // Triple tap - request motion permissions
+                console.log('Triple tap detected - requesting motion permissions');
+                await this.triggerMotionPermissionDialog();
+                tapCount = 0;
+            }
+        };
+        
+        cameraContainer.addEventListener('touchend', handleTap);
+        cameraContainer.addEventListener('click', handleTap);
+        
+        // Also add a long press for motion permissions
+        let longPressTimer = null;
+        
+        cameraContainer.addEventListener('touchstart', (e) => {
+            longPressTimer = setTimeout(async () => {
+                console.log('Long press detected - requesting motion permissions');
+                await this.triggerMotionPermissionDialog();
+            }, 1000); // 1 second long press
         });
         
-        cameraContainer.addEventListener('click', (e) => {
-            if (!e.target.closest('button')) {
-                this.handleDoubleTap();
+        cameraContainer.addEventListener('touchend', () => {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
             }
         });
     }
