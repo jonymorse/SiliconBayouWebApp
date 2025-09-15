@@ -23,12 +23,12 @@ class SnapLensProper {
     }
     
     async initializeApp() {
+        // Remove button event listeners since buttons are hidden
         this.setupDoubleTapGesture();
         this.setupBackgroundAudio();
         await this.initializeCameraKit();
         await this.autoStartWithLens();
-    }
-    
+    }    
     async initializeCameraKit() {
         try {
             this.updateStatus('Initializing...');
@@ -56,6 +56,7 @@ class SnapLensProper {
             || (/Macintosh/.test(navigator.userAgent) && 'ontouchend' in document);
             const dpr = isiOS ? 1 : Math.min(window.devicePixelRatio || 1, 2);
           
+
             const resizeLiveCanvas = () => {
                 const rect = this.liveCanvas.getBoundingClientRect();
                 this.liveCanvas.width = Math.round(rect.width * dpr);
@@ -83,14 +84,14 @@ class SnapLensProper {
         try {
             this.updateStatus('Starting camera...');
             
+            // Original camera constraints - keeping your rendering approach
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
                 video: { 
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: this.currentFacingMode,
+                    width: { ideal: 640, max: 1280 },
+                    height: { ideal: 480, max: 720 },
+                    facingMode: { exact: this.currentFacingMode },
                     frameRate: { ideal: 30, max: 30 }
-                },
-                audio: false
+                }
             });
             
             const source = createMediaStreamSource(this.mediaStream);
@@ -111,13 +112,11 @@ class SnapLensProper {
                 this.updateStatus('Camera unavailable');
             }
         }
-    }
-    
+    }    
     async tryFallbackCamera() {
         try {
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: this.currentFacingMode },
-                audio: false
+                video: { facingMode: this.currentFacingMode }
             });
             
             const source = createMediaStreamSource(this.mediaStream);
@@ -139,61 +138,22 @@ class SnapLensProper {
         if (!this.session) return;
         
         try {
-            console.log('Starting camera switch...');
-            
-            // Store lens state
-            const wasLensActive = this.lensActive;
-            const currentLensRef = this.currentLens;
-            
-            // CRITICAL: Clear lens FIRST before stopping stream (prevents WebGL issues)
-            if (wasLensActive) {
-                console.log('Clearing lens...');
-                await this.session.clearLens();
-                this.lensActive = false;
-            }
-            
-            // CRITICAL: Properly stop each track individually (iOS requirement)
             if (this.mediaStream) {
-                console.log('Stopping media tracks...');
-                const tracks = this.mediaStream.getTracks();
-                tracks.forEach(track => {
-                    console.log(`Stopping ${track.kind} track: ${track.label}`);
-                    track.stop();
-                });
-                this.mediaStream = null;
+                this.mediaStream.getTracks().forEach(track => track.stop());
             }
             
-            // CRITICAL: Wait for iOS to release camera hardware
-            console.log('Waiting for camera release...');
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // Switch facing mode
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            console.log(`Switched to: ${this.currentFacingMode}`);
-            
-            // Start new camera
             await this.startCamera();
             
-            // Wait for camera to stabilize
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // Reapply lens if it was active
-            if (wasLensActive && currentLensRef) {
-                console.log('Reapplying lens...');
-                await this.session.applyLens(currentLensRef);
-                this.lensActive = true;
-                this.updateStatus('AR active!');
+            if (this.lensActive && this.currentLens) {
+                await this.session.applyLens(this.currentLens);
             }
-            
-            console.log('Camera switch completed');
             
         } catch (error) {
             console.error('Switch failed:', error);
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            this.updateStatus('Switch failed');
         }
-    }
-    
+    }    
     async toggleLens() {
         if (!this.session) return;
         
@@ -231,8 +191,7 @@ class SnapLensProper {
             console.error('Auto-start failed:', error);
             this.updateStatus('Auto-start failed');
         }
-    }
-    
+    }    
     setupDoubleTapGesture() {
         const cameraContainer = document.querySelector('.camera-container');
         
@@ -255,7 +214,7 @@ class SnapLensProper {
         }
         
         // Set audio properties
-        this.backgroundAudio.volume = 0.2;
+        this.backgroundAudio.volume = 0.2; // Lower volume for ambient background
         this.backgroundAudio.loop = true;
         
         // Add basic event listeners
