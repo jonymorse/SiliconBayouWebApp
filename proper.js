@@ -84,16 +84,19 @@ class SnapLensProper {
         try {
             this.updateStatus('Starting camera...');
             
-            // Enhanced constraints following official recommendations
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
+            // iOS-compatible constraints (remove 'exact' which causes freezing)
+            const constraints = {
                 video: { 
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
-                    facingMode: { exact: this.currentFacingMode },
+                    facingMode: this.currentFacingMode, // Remove 'exact' wrapper
                     frameRate: { ideal: 30, max: 30 }
                 },
                 audio: false // Explicitly define audio per documentation
-            });
+            };
+            
+            console.log('📱 Requesting camera with constraints:', constraints);
+            this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
             
             const source = createMediaStreamSource(this.mediaStream);
             await this.session.setSource(source);
@@ -103,11 +106,20 @@ class SnapLensProper {
             }
             
             this.session.play("live");
+            
+            // Log actual settings to verify camera
+            const track = this.mediaStream.getVideoTracks()[0];
+            if (track && track.getSettings) {
+                const settings = track.getSettings();
+                console.log('✅ Camera started with settings:', settings);
+            }
+            
             this.updateStatus('Camera ready!');
             
         } catch (error) {
-            console.error('Camera failed:', error);
-            if (error.name === 'OverconstrainedError') {
+            console.error('❌ Camera failed:', error);
+            if (error.name === 'OverconstrainedError' || error.name === 'ConstraintNotSatisfiedError') {
+                console.log('🔄 Trying fallback constraints...');
                 this.tryFallbackCamera();
             } else {
                 this.updateStatus('Camera unavailable');
@@ -116,10 +128,18 @@ class SnapLensProper {
     }
     async tryFallbackCamera() {
         try {
-            this.mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: this.currentFacingMode },
+            console.log('🔄 Attempting fallback camera with minimal constraints...');
+            
+            // Very basic constraints for iOS compatibility
+            const fallbackConstraints = {
+                video: { 
+                    facingMode: this.currentFacingMode // No width/height constraints
+                },
                 audio: false
-            });
+            };
+            
+            console.log('📱 Fallback constraints:', fallbackConstraints);
+            this.mediaStream = await navigator.mediaDevices.getUserMedia(fallbackConstraints);
             
             const source = createMediaStreamSource(this.mediaStream);
             await this.session.setSource(source);
@@ -129,65 +149,97 @@ class SnapLensProper {
             }
             
             this.session.play("live");
+            
+            // Log actual settings
+            const track = this.mediaStream.getVideoTracks()[0];
+            if (track && track.getSettings) {
+                const settings = track.getSettings();
+                console.log('✅ Fallback camera started with settings:', settings);
+            }
+            
             this.updateStatus('Camera started!');
         } catch (fallbackError) {
-            console.error('Fallback camera failed:', fallbackError);
+            console.error('❌ Fallback camera also failed:', fallbackError);
             this.updateStatus('Unable to access camera');
         }
     }
     
-    // Simplified camera switching following official documentation
+    // Enhanced camera switching to prevent iOS freezing
     async switchCamera() {
         if (!this.session) return;
         
         try {
-            console.log('📱 Switching camera...');
-            
-            // Stop current MediaStreamTrack as recommended in documentation
-            if (this.mediaStream) {
-                const track = this.mediaStream.getVideoTracks()[0];
-                if (track) {
-                    track.stop();
-                    console.log('🔴 Previous camera track stopped');
-                }
-                this.mediaStream = null;
-            }
+            console.log('📱 Starting camera switch...');
+            this.updateStatus('Switching camera...');
             
             // Store lens state
             const wasLensActive = this.lensActive;
             const currentLensRef = this.currentLens;
             
-            // Clear lens before camera switch
+            // CRITICAL: Clear lens BEFORE stopping camera to prevent freezing
             if (wasLensActive) {
+                console.log('🎭 Clearing lens before camera switch...');
                 await this.session.clearLens();
                 this.lensActive = false;
             }
             
-            // Switch facing mode
-            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            console.log(`📱 Switched to: ${this.currentFacingMode}`);
+            // CRITICAL: Stop all tracks properly as per iOS requirements
+            if (this.mediaStream) {
+                console.log('🔴 Stopping all media tracks...');
+                this.mediaStream.getTracks().forEach(track => {
+                    console.log(`Stopping track: ${track.kind} - ${track.label}`);
+                    track.stop();
+                });
+                this.mediaStream = null;
+            }
             
-            // Start new camera
+            // Wait for cleanup to complete (critical for iOS)
+            console.log('⏳ Waiting for stream cleanup...');
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Switch facing mode
+            const oldMode = this.currentFacingMode;
+            this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+            console.log(`🔄 Switching from ${oldMode} to ${this.currentFacingMode}`);
+            
+            // Start new camera with iOS-compatible approach
             await this.startCamera();
             
-            // Wait a moment for stabilization
+            // Wait for camera to stabilize
+            console.log('⏳ Waiting for camera stabilization...');
             await new Promise(resolve => setTimeout(resolve, 500));
             
             // Reapply lens if it was active
             if (wasLensActive && currentLensRef) {
-                console.log('🎭 Reapplying lens...');
-                await this.session.applyLens(currentLensRef);
-                this.lensActive = true;
-                this.updateStatus('AR active!');
+                console.log('🎭 Reapplying lens after camera switch...');
+                try {
+                    await this.session.applyLens(currentLensRef);
+                    this.lensActive = true;
+                    this.updateStatus('AR active!');
+                } catch (lensError) {
+                    console.error('❌ Failed to reapply lens:', lensError);
+                    this.updateStatus('Camera switched, lens failed');
+                }
+            } else {
+                this.updateStatus('Camera switched!');
             }
             
-            console.log('✅ Camera switch completed');
+            console.log('✅ Camera switch completed successfully');
             
         } catch (error) {
-            console.error('❌ Switch failed:', error);
-            // Revert facing mode on failure
+            console.error('❌ Camera switch failed:', error);
+            
+            // Try to recover by reverting facing mode
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
-            this.updateStatus('Switch failed');
+            this.updateStatus('Switch failed, trying to recover...');
+            
+            try {
+                await this.startCamera();
+                this.updateStatus('Recovered to original camera');
+            } catch (recoveryError) {
+                console.error('❌ Recovery also failed:', recoveryError);
+                this.updateStatus('Camera error - please refresh');
+            }
         }
     }
     async toggleLens() {
