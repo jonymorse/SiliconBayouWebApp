@@ -18,6 +18,7 @@ class SnapLensProper {
         this.lastTap = 0;
         this.tapTimeout = null;
         this.backgroundAudio = document.getElementById('backgroundAudio');
+        this.doubleTapHandler = null; // Store handler for cleanup
         
         this.initializeApp();
     }
@@ -221,14 +222,16 @@ class SnapLensProper {
                 this.updateStatus(`Error: ${event.detail}`);
             });
             
-            // Replace canvas output
-            if (this.liveCanvas) {
+            // Replace canvas output and maintain event listeners
+            if (this.liveCanvas && this.liveCanvas.parentElement) {
+                const parent = this.liveCanvas.parentElement;
                 this.liveCanvas.replaceWith(this.session.output.live);
+                this.liveCanvas = this.session.output.live;
             } else {
                 this.outputContainer.replaceWith(this.session.output.live);
+                this.liveCanvas = this.session.output.live;
             }
             
-            this.liveCanvas = this.session.output.live;
             this.liveCanvas.id = 'live-canvas';
             this.liveCanvas.style.width = "100%";
             this.liveCanvas.style.height = "100%";
@@ -236,7 +239,10 @@ class SnapLensProper {
             this.liveCanvas.style.background = "#000";
             this.liveCanvas.style.display = "block";
             
-            console.log('✅ Fresh session created');
+            // Re-setup double-tap since we replaced the canvas
+            this.setupDoubleTapGesture();
+            
+            console.log('✅ Fresh session created with restored gestures');
             
             // Step 7: Start camera with fresh session
             await this.startCamera();
@@ -315,18 +321,26 @@ class SnapLensProper {
         }
     }    
     setupDoubleTapGesture() {
+        // Attach to the parent container instead of the canvas that gets replaced
         const cameraContainer = document.querySelector('.camera-container');
         
-        cameraContainer.addEventListener('touchend', (e) => {
+        // Remove any existing listeners to prevent duplicates
+        const existingHandler = this.doubleTapHandler;
+        if (existingHandler) {
+            cameraContainer.removeEventListener('touchend', existingHandler);
+            cameraContainer.removeEventListener('click', existingHandler);
+        }
+        
+        // Create the handler and store it for cleanup
+        this.doubleTapHandler = (e) => {
             e.preventDefault();
             this.handleDoubleTap();
-        });
+        };
         
-        cameraContainer.addEventListener('click', (e) => {
-            if (!e.target.closest('button')) {
-                this.handleDoubleTap();
-            }
-        });
+        cameraContainer.addEventListener('touchend', this.doubleTapHandler);
+        cameraContainer.addEventListener('click', this.doubleTapHandler);
+        
+        console.log('✅ Double-tap gesture setup on camera container');
     }
     
     setupBackgroundAudio() {
