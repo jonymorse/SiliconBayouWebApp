@@ -139,38 +139,58 @@ class SnapLensProper {
         if (!this.session) return;
         
         try {
-            // Stop current media stream
-            if (this.mediaStream) {
-                this.mediaStream.getTracks().forEach(track => track.stop());
-                this.mediaStream = null;
-            }
+            console.log('Starting camera switch...');
             
             // Store lens state
             const wasLensActive = this.lensActive;
             const currentLensRef = this.currentLens;
             
-            // Clear lens before switch
+            // CRITICAL: Clear lens FIRST before stopping stream (prevents WebGL issues)
             if (wasLensActive) {
+                console.log('Clearing lens...');
                 await this.session.clearLens();
                 this.lensActive = false;
             }
             
+            // CRITICAL: Properly stop each track individually (iOS requirement)
+            if (this.mediaStream) {
+                console.log('Stopping media tracks...');
+                const tracks = this.mediaStream.getTracks();
+                tracks.forEach(track => {
+                    console.log(`Stopping ${track.kind} track: ${track.label}`);
+                    track.stop();
+                });
+                this.mediaStream = null;
+            }
+            
+            // CRITICAL: Wait for iOS to release camera hardware
+            console.log('Waiting for camera release...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
             // Switch facing mode
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+            console.log(`Switched to: ${this.currentFacingMode}`);
             
             // Start new camera
             await this.startCamera();
             
+            // Wait for camera to stabilize
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
             // Reapply lens if it was active
             if (wasLensActive && currentLensRef) {
+                console.log('Reapplying lens...');
                 await this.session.applyLens(currentLensRef);
                 this.lensActive = true;
                 this.updateStatus('AR active!');
             }
             
+            console.log('Camera switch completed');
+            
         } catch (error) {
             console.error('Switch failed:', error);
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+            this.updateStatus('Switch failed');
         }
     }
     
