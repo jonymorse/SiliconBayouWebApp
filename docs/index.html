@@ -73,78 +73,114 @@
             -webkit-backdrop-filter: blur(10px);
         }
 
-        /* Lens Status Indicator */
-        .lens-indicator {
+        /* Capture Button */
+        .capture-button {
             position: absolute;
             top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.7);
+            right: 20px;
+            background: rgba(255, 59, 48, 0.8);
             color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 500;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 59, 48, 0.9);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
             transition: all 0.3s ease;
             z-index: 100;
             display: flex;
             align-items: center;
-            gap: 6px;
-            max-width: 200px;
-            overflow: hidden;
+            justify-content: center;
+            font-size: 1.2rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
 
-        .lens-indicator.active {
-            background: rgba(0, 200, 83, 0.8);
-            border-color: rgba(0, 200, 83, 0.5);
+        .capture-button:hover,
+        .capture-button:active {
+            background: rgba(255, 59, 48, 0.9);
+            border-color: rgba(255, 59, 48, 1);
+            transform: scale(1.05);
         }
 
-        .lens-indicator.ready {
-            background: rgba(0, 122, 255, 0.8);
-            border-color: rgba(0, 122, 255, 0.5);
+        .capture-button:disabled {
+            background: rgba(128, 128, 128, 0.3);
+            border-color: rgba(128, 128, 128, 0.3);
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
         }
 
-        .lens-indicator.loading {
-            background: rgba(255, 149, 0, 0.8);
-            border-color: rgba(255, 149, 0, 0.5);
+        .capture-button::after {
+            content: "📷";
         }
 
-        .lens-indicator.error {
-            background: rgba(255, 59, 48, 0.8);
-            border-color: rgba(255, 59, 48, 0.5);
+        /* Photo Preview Overlay */
+        .photo-preview {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: none;
+            z-index: 200;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
         }
 
-        .lens-indicator .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: currentColor;
-            flex-shrink: 0;
+        .photo-preview.show {
+            display: flex;
         }
 
-        .lens-indicator .camera-indicator {
-            font-size: 0.7rem;
-            opacity: 0.8;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 2px 6px;
+        .photo-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
             border-radius: 8px;
-            margin-left: 4px;
+        }
+
+        .photo-preview-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 201;
+        }
+
+        .preview-button {
+            background: rgba(255, 255, 255, 0.9);
+            color: #000;
+            border: none;
+            border-radius: 25px;
+            padding: 12px 20px;
+            font-size: 0.9rem;
             font-weight: 600;
-            min-width: 16px;
-            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
         }
 
-        .lens-indicator.active .status-dot {
-            background: #fff;
-            animation: pulse 2s ease-in-out infinite;
+        .preview-button:hover,
+        .preview-button:active {
+            background: rgba(255, 255, 255, 1);
+            transform: scale(1.05);
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.7; transform: scale(1.2); }
+        .preview-button.download {
+            background: rgba(0, 122, 255, 0.9);
+            color: white;
         }
+
+        .preview-button.download:hover,
+        .preview-button.download:active {
+            background: rgba(0, 122, 255, 1);
+        }
+
+
 
         button {
             background: rgba(255, 255, 255, 0.2);
@@ -219,9 +255,9 @@
                 padding-bottom: max(20px, env(safe-area-inset-bottom));
             }
             
-            .lens-indicator {
+            .capture-button {
                 top: max(20px, env(safe-area-inset-top));
-                left: max(20px, env(safe-area-inset-left));
+                right: max(20px, env(safe-area-inset-right));
             }
         }
 
@@ -268,7 +304,7 @@
             }
         }
     </style>
-  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/index-Bjl8U8oo.js"></script>
+  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/index-C-dH85K0.js"></script>
 </head>
 <body>
     <div class="app">
@@ -278,11 +314,16 @@
             </div>
         </div>
         
-        <!-- Lens Status Indicator -->
-        <div class="lens-indicator" id="lensIndicator">
-            <div class="status-dot"></div>
-            <span class="status-text">Initializing...</span>
-            <span class="camera-indicator" id="cameraIndicator"></span>
+        <!-- Capture Button -->
+        <button class="capture-button" id="captureButton" title="Capture Photo"></button>
+        
+        <!-- Photo Preview Overlay -->
+        <div class="photo-preview" id="photoPreview">
+            <img id="previewImage" alt="Captured Photo">
+            <div class="photo-preview-controls">
+                <button class="preview-button" id="retakeButton">✕</button>
+                <button class="preview-button download" id="saveButton">📤</button>
+            </div>
         </div>
         
         <div class="controls">

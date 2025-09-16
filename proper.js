@@ -1,5 +1,13 @@
 import { bootstrapCameraKit, createMediaStreamSource, Transform2D } from '@snap/camera-kit';
 
+// Supabase configuration
+const SUPABASE_URL = 'https://fwcdxvnpcpyxywbjwyaa.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3Y2R4dm5wY3B5eHl3Ymp3eWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5OTg5NjMsImV4cCI6MjA3MzU3NDk2M30.XEfxRw39wp5jMs3YWFszhFZ1_ZXOilraSBN8R1e3LOI';
+const BUCKET = 'gallerybucket';
+
+// Initialize Supabase (will be available after DOM loads)
+let supabase;
+
 const LENS_CONFIG = {
     API_TOKEN: 'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M',
     LENS_ID: '6f32833b-0365-4e96-8861-bb2b332a82ec',
@@ -9,9 +17,12 @@ const LENS_CONFIG = {
 class SnapLensProper {
     constructor() {
         this.outputContainer = document.getElementById('canvas-output');
-        this.lensIndicator = document.getElementById('lensIndicator');
-        this.lensIndicatorText = this.lensIndicator.querySelector('.status-text');
-        this.cameraIndicator = document.getElementById('cameraIndicator');
+        this.captureButton = document.getElementById('captureButton');
+        this.photoPreview = document.getElementById('photoPreview');
+        this.previewImage = document.getElementById('previewImage');
+        this.retakeButton = document.getElementById('retakeButton');
+        this.saveButton = document.getElementById('saveButton');
+        this.lastCapturedBlob = null;
         this.cameraKit = null;
         this.session = null;
         this.mediaStream = null;
@@ -26,22 +37,40 @@ class SnapLensProper {
     }
     
     async initializeApp() {
-        // Remove button event listeners since buttons are hidden
+        // Initialize Supabase
+        await this.initializeSupabase();
+        
+        // Setup UI event listeners
+        this.setupCaptureButton();
+        this.setupPreviewControls();
         this.setupDoubleTapGesture();
         this.setupBackgroundAudio();
+        
+        // Initialize Camera Kit
         await this.initializeCameraKit();
         await this.autoStartWithLens();
+    }
+    
+    async initializeSupabase() {
+        try {
+            // Import Supabase
+            const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+            supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+            
+            console.log('🟢 Supabase initialized successfully');
+        } catch (error) {
+            console.error('❌ Supabase initialization failed:', error);
+        }
     }    
     async initializeCameraKit() {
         try {
-            this.updateLensStatus('Initializing Camera Kit...', 'loading');
+            this.updateStatus('Initializing...');
             this.cameraKit = await bootstrapCameraKit({ apiToken: LENS_CONFIG.API_TOKEN });
             this.session = await this.cameraKit.createSession();
             
             this.session.events.addEventListener("error", (event) => {
                 console.error('Camera Kit error:', event.detail);
                 this.updateStatus(`Error: ${event.detail}`);
-                this.updateLensStatus('Camera Kit Error', 'error');
             });
             
             this.outputContainer.replaceWith(this.session.output.live);
@@ -77,18 +106,16 @@ class SnapLensProper {
             resizeLiveCanvas();
             
             this.updateStatus('Ready to start');
-            this.updateLensStatus('Ready', 'ready');
             
         } catch (error) {
             console.error('Failed to initialize Camera Kit:', error);
             this.updateStatus(`Init error: ${error.message}`);
-            this.updateLensStatus(`Init Error: ${error.message}`, 'error');
         }
     }
     
     async startCamera() {
         try {
-            this.updateLensStatus('Starting camera...', 'loading');
+            this.updateStatus('Starting camera...');
             
             // Original camera constraints - keeping your rendering approach
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -109,8 +136,6 @@ class SnapLensProper {
             
             this.session.play("live");
             this.updateStatus('Camera ready!');
-            this.updateLensStatus('Camera Active', 'ready');
-            this.updateCameraIndicator();
             
         } catch (error) {
             console.error('Camera failed:', error);
@@ -118,7 +143,6 @@ class SnapLensProper {
                 this.tryFallbackCamera();
             } else {
                 this.updateStatus('Camera unavailable');
-                this.updateLensStatus('Camera Unavailable', 'error');
             }
         }
     }    
@@ -137,12 +161,9 @@ class SnapLensProper {
             
             this.session.play("live");
             this.updateStatus('Camera started!');
-            this.updateLensStatus('Camera Active', 'ready');
-            this.updateCameraIndicator();
         } catch (fallbackError) {
             console.error('Fallback camera failed:', fallbackError);
             this.updateStatus('Unable to access camera');
-            this.updateLensStatus('Camera Failed', 'error');
         }
     }
     
@@ -158,7 +179,6 @@ class SnapLensProper {
             
             // If switching to back camera (environment), refresh the entire page
             if (this.currentFacingMode === 'environment') {
-                this.updateLensStatus('Switching to back camera...', 'loading');
                 console.log('Switching to back camera - refreshing page...');
                 
                 // Small delay to show the status message
@@ -175,8 +195,6 @@ class SnapLensProper {
                 await this.session.applyLens(this.currentLens);
             }
             
-            this.updateCameraIndicator();
-            
         } catch (error) {
             console.error('Switch failed:', error);
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
@@ -187,28 +205,28 @@ class SnapLensProper {
         
         try {
             if (this.lensActive && this.currentLens) {
-                this.updateLensStatus('Removing lens...', 'loading');
+                console.log('🔄 Removing AR lens...');
                 await this.session.clearLens();
                 this.lensActive = false;
                 this.currentLens = null;
                 this.updateStatus('Lens removed');
-                this.updateLensStatus('Camera Only', 'ready');
+                console.log('✅ AR lens removed');
             } else {
+                console.log('🔄 Loading AR lens...');
                 this.updateStatus('Loading lens...');
-                this.updateLensStatus('Loading AR Lens...', 'loading');
                 this.currentLens = await this.cameraKit.lensRepository.loadLens(
                     LENS_CONFIG.LENS_ID, 
                     LENS_CONFIG.LENS_GROUP_ID
                 );
+                console.log('📦 Lens loaded, applying...');
                 await this.session.applyLens(this.currentLens);
                 this.lensActive = true;
                 this.updateStatus('AR active!');
-                this.updateLensStatus('AR Lens Active', 'active');
+                console.log('✨ AR lens active!');
             }
         } catch (error) {
-            console.error('Lens error:', error);
+            console.error('❌ Lens error:', error);
             this.updateStatus(`Lens error: ${error.message}`);
-            this.updateLensStatus(`Lens Error: ${error.message}`, 'error');
             this.lensActive = false;
             this.currentLens = null;
         }
@@ -217,16 +235,42 @@ class SnapLensProper {
     async autoStartWithLens() {
         try {
             this.updateStatus('Auto-starting...');
-            this.updateLensStatus('Auto-starting...', 'loading');
             await this.startCamera();
             await new Promise(resolve => setTimeout(resolve, 1000));
             await this.toggleLens();
         } catch (error) {
             console.error('Auto-start failed:', error);
             this.updateStatus('Auto-start failed');
-            this.updateLensStatus('Auto-start Failed', 'error');
         }
     }    
+    setupCaptureButton() {
+        if (this.captureButton) {
+            this.captureButton.addEventListener('click', () => {
+                if (this.photoPreview.classList.contains('show')) {
+                    // If preview is showing, hide it and return to camera
+                    this.hidePhotoPreview();
+                } else {
+                    // If camera is showing, capture photo
+                    this.capturePhoto();
+                }
+            });
+        }
+    }
+    
+    setupPreviewControls() {
+        if (this.retakeButton) {
+            this.retakeButton.addEventListener('click', () => {
+                this.hidePhotoPreview();
+            });
+        }
+        
+        if (this.saveButton) {
+            this.saveButton.addEventListener('click', () => {
+                this.saveToSupabase();
+            });
+        }
+    }
+    
     setupDoubleTapGesture() {
         const cameraContainer = document.querySelector('.camera-container');
         
@@ -309,30 +353,139 @@ class SnapLensProper {
         console.log(message);
     }
     
-    updateLensStatus(message, status = 'ready') {
-        if (this.lensIndicatorText) {
-            this.lensIndicatorText.textContent = message;
+    capturePhoto() {
+        if (!this.session || !this.liveCanvas) {
+            console.error('Camera session not ready for capture');
+            return;
         }
         
-        if (this.lensIndicator) {
-            // Remove all status classes
-            this.lensIndicator.classList.remove('active', 'loading', 'error', 'ready');
-            // Add the current status class
-            this.lensIndicator.classList.add(status);
+        try {
+            // Create a temporary canvas to capture the current frame
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // Set canvas size to match the live canvas
+            tempCanvas.width = this.liveCanvas.width;
+            tempCanvas.height = this.liveCanvas.height;
+            
+            // Draw the current frame from the live canvas
+            tempCtx.drawImage(this.liveCanvas, 0, 0);
+            
+            // Convert to blob and show preview
+            tempCanvas.toBlob((blob) => {
+                if (blob) {
+                    this.lastCapturedBlob = blob;
+                    const url = URL.createObjectURL(blob);
+                    
+                    // Show the photo in preview
+                    this.previewImage.src = url;
+                    this.showPhotoPreview();
+                    
+                    console.log('📸 Photo captured and previewing!');
+                    
+                    // Brief visual feedback on capture button
+                    this.captureButton.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                        this.captureButton.style.transform = '';
+                    }, 150);
+                } else {
+                    console.error('Failed to create photo blob');
+                }
+            }, 'image/png');
+            
+        } catch (error) {
+            console.error('Photo capture failed:', error);
         }
-        
-        console.log(`Lens Status: ${message} (${status})`);
     }
     
-    updateCameraIndicator() {
-        if (this.cameraIndicator) {
-            const cameraText = this.currentFacingMode === 'user' ? '🤳' : '📷';
-            const cameraLabel = this.currentFacingMode === 'user' ? 'Front' : 'Back';
-            this.cameraIndicator.textContent = `${cameraText}`;
-            this.cameraIndicator.title = `${cameraLabel} Camera Active`;
+    showPhotoPreview() {
+        this.photoPreview.classList.add('show');
+        // Update capture button icon to indicate it will close preview
+        this.captureButton.style.opacity = '0.8';
+    }
+    
+    hidePhotoPreview() {
+        this.photoPreview.classList.remove('show');
+        // Reset capture button
+        this.captureButton.style.opacity = '1';
+        
+        // Reset save button
+        this.saveButton.textContent = '📤';
+        this.saveButton.disabled = false;
+        
+        // Clean up the blob URL
+        if (this.previewImage.src) {
+            URL.revokeObjectURL(this.previewImage.src);
+            this.previewImage.src = '';
+        }
+        this.lastCapturedBlob = null;
+    }
+    
+    async saveToSupabase() {
+        if (!this.lastCapturedBlob || !supabase) {
+            console.error('Cannot save: Missing photo data or Supabase not initialized');
+            return;
         }
         
-        console.log(`Camera: ${this.currentFacingMode === 'user' ? 'Front' : 'Back'}`);
+        try {
+            // Show loading state
+            this.saveButton.textContent = '⏳';
+            this.saveButton.disabled = true;
+            
+            // Create filename
+            const timestamp = Date.now();
+            const filename = `snap-capture-${timestamp}.png`;
+            
+            // Upload to Supabase Storage
+            console.log('📤 Uploading photo to Supabase...');
+            const { data, error } = await supabase.storage
+                .from(BUCKET)
+                .upload(filename, this.lastCapturedBlob, {
+                    contentType: 'image/png'
+                });
+            
+            if (error) {
+                throw error;
+            }
+            
+            console.log('✅ Photo saved to Supabase:', filename);
+            
+            // Success feedback
+            this.saveButton.textContent = '✅';
+            setTimeout(() => {
+                this.hidePhotoPreview();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Failed to save to Supabase:', error);
+            
+            // Error feedback
+            this.saveButton.textContent = '❌';
+            setTimeout(() => {
+                this.saveButton.textContent = '📤';
+                this.saveButton.disabled = false;
+            }, 2000);
+        }
+    }
+    
+    downloadPhoto() {
+        // Keep the download functionality as backup
+        if (this.lastCapturedBlob) {
+            const url = URL.createObjectURL(this.lastCapturedBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `snap-capture-${Date.now()}.png`;
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up the blob URL
+            URL.revokeObjectURL(url);
+            
+            console.log('💾 Photo downloaded locally!');
+        }
     }
     
     destroy() {
