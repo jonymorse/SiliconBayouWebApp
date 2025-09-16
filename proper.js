@@ -9,6 +9,9 @@ const LENS_CONFIG = {
 class SnapLensProper {
     constructor() {
         this.outputContainer = document.getElementById('canvas-output');
+        this.lensIndicator = document.getElementById('lensIndicator');
+        this.lensIndicatorText = this.lensIndicator.querySelector('.status-text');
+        this.cameraIndicator = document.getElementById('cameraIndicator');
         this.cameraKit = null;
         this.session = null;
         this.mediaStream = null;
@@ -31,13 +34,14 @@ class SnapLensProper {
     }    
     async initializeCameraKit() {
         try {
-            this.updateStatus('Initializing...');
+            this.updateLensStatus('Initializing Camera Kit...', 'loading');
             this.cameraKit = await bootstrapCameraKit({ apiToken: LENS_CONFIG.API_TOKEN });
             this.session = await this.cameraKit.createSession();
             
             this.session.events.addEventListener("error", (event) => {
                 console.error('Camera Kit error:', event.detail);
                 this.updateStatus(`Error: ${event.detail}`);
+                this.updateLensStatus('Camera Kit Error', 'error');
             });
             
             this.outputContainer.replaceWith(this.session.output.live);
@@ -73,16 +77,18 @@ class SnapLensProper {
             resizeLiveCanvas();
             
             this.updateStatus('Ready to start');
+            this.updateLensStatus('Ready', 'ready');
             
         } catch (error) {
             console.error('Failed to initialize Camera Kit:', error);
             this.updateStatus(`Init error: ${error.message}`);
+            this.updateLensStatus(`Init Error: ${error.message}`, 'error');
         }
     }
     
     async startCamera() {
         try {
-            this.updateStatus('Starting camera...');
+            this.updateLensStatus('Starting camera...', 'loading');
             
             // Original camera constraints - keeping your rendering approach
             this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -103,6 +109,8 @@ class SnapLensProper {
             
             this.session.play("live");
             this.updateStatus('Camera ready!');
+            this.updateLensStatus('Camera Active', 'ready');
+            this.updateCameraIndicator();
             
         } catch (error) {
             console.error('Camera failed:', error);
@@ -110,6 +118,7 @@ class SnapLensProper {
                 this.tryFallbackCamera();
             } else {
                 this.updateStatus('Camera unavailable');
+                this.updateLensStatus('Camera Unavailable', 'error');
             }
         }
     }    
@@ -128,9 +137,12 @@ class SnapLensProper {
             
             this.session.play("live");
             this.updateStatus('Camera started!');
+            this.updateLensStatus('Camera Active', 'ready');
+            this.updateCameraIndicator();
         } catch (fallbackError) {
             console.error('Fallback camera failed:', fallbackError);
             this.updateStatus('Unable to access camera');
+            this.updateLensStatus('Camera Failed', 'error');
         }
     }
     
@@ -149,6 +161,8 @@ class SnapLensProper {
                 await this.session.applyLens(this.currentLens);
             }
             
+            this.updateCameraIndicator();
+            
         } catch (error) {
             console.error('Switch failed:', error);
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
@@ -159,12 +173,15 @@ class SnapLensProper {
         
         try {
             if (this.lensActive && this.currentLens) {
+                this.updateLensStatus('Removing lens...', 'loading');
                 await this.session.clearLens();
                 this.lensActive = false;
                 this.currentLens = null;
                 this.updateStatus('Lens removed');
+                this.updateLensStatus('Camera Only', 'ready');
             } else {
                 this.updateStatus('Loading lens...');
+                this.updateLensStatus('Loading AR Lens...', 'loading');
                 this.currentLens = await this.cameraKit.lensRepository.loadLens(
                     LENS_CONFIG.LENS_ID, 
                     LENS_CONFIG.LENS_GROUP_ID
@@ -172,10 +189,12 @@ class SnapLensProper {
                 await this.session.applyLens(this.currentLens);
                 this.lensActive = true;
                 this.updateStatus('AR active!');
+                this.updateLensStatus('AR Lens Active', 'active');
             }
         } catch (error) {
             console.error('Lens error:', error);
             this.updateStatus(`Lens error: ${error.message}`);
+            this.updateLensStatus(`Lens Error: ${error.message}`, 'error');
             this.lensActive = false;
             this.currentLens = null;
         }
@@ -184,12 +203,14 @@ class SnapLensProper {
     async autoStartWithLens() {
         try {
             this.updateStatus('Auto-starting...');
+            this.updateLensStatus('Auto-starting...', 'loading');
             await this.startCamera();
             await new Promise(resolve => setTimeout(resolve, 1000));
             await this.toggleLens();
         } catch (error) {
             console.error('Auto-start failed:', error);
             this.updateStatus('Auto-start failed');
+            this.updateLensStatus('Auto-start Failed', 'error');
         }
     }    
     setupDoubleTapGesture() {
@@ -272,6 +293,32 @@ class SnapLensProper {
             this.outputContainer.textContent = message;
         }
         console.log(message);
+    }
+    
+    updateLensStatus(message, status = 'ready') {
+        if (this.lensIndicatorText) {
+            this.lensIndicatorText.textContent = message;
+        }
+        
+        if (this.lensIndicator) {
+            // Remove all status classes
+            this.lensIndicator.classList.remove('active', 'loading', 'error', 'ready');
+            // Add the current status class
+            this.lensIndicator.classList.add(status);
+        }
+        
+        console.log(`Lens Status: ${message} (${status})`);
+    }
+    
+    updateCameraIndicator() {
+        if (this.cameraIndicator) {
+            const cameraText = this.currentFacingMode === 'user' ? '🤳' : '📷';
+            const cameraLabel = this.currentFacingMode === 'user' ? 'Front' : 'Back';
+            this.cameraIndicator.textContent = `${cameraText}`;
+            this.cameraIndicator.title = `${cameraLabel} Camera Active`;
+        }
+        
+        console.log(`Camera: ${this.currentFacingMode === 'user' ? 'Front' : 'Back'}`);
     }
     
     destroy() {
