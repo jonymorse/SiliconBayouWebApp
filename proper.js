@@ -155,6 +155,20 @@ class SnapLensProper {
             }
             
             this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+            
+            // If switching to back camera (environment), refresh the entire page
+            if (this.currentFacingMode === 'environment') {
+                this.updateLensStatus('Switching to back camera...', 'loading');
+                console.log('Switching to back camera - refreshing page...');
+                
+                // Small delay to show the status message
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+                return;
+            }
+            
+            // Continue with normal camera switch for front camera
             await this.startCamera();
             
             if (this.lensActive && this.currentLens) {
