@@ -33,7 +33,7 @@ class SnapLensApp {
     this.cameraKit = null;
     this.session = null;
     this.mediaStream = null;
-    this.currentFacingMode = 'user'; // start on FRONT camera as requested
+    this.currentFacingMode = 'environment'; // Bayou defaults to REAR
     this.currentLens = null;
 
     /* canvases & UI */
@@ -70,7 +70,7 @@ class SnapLensApp {
     this.wireUI();
     await this.initCameraKit();
     await this.ensureLens();
-    await this.setCamera('environment');        // Bayou starts on FRONT
+    await this.setCamera('environment'); // Bayou starts on REAR
     await this.session.play();
     this.switchTab('bayou');             // show camera view
   }
@@ -153,11 +153,11 @@ class SnapLensApp {
     if (tab === 'bayou') {
       this.showOnly(this.cameraView);
       await this.ensureLens();
-      await this.setCamera('user');  // Bayou = FRONT (per your request)
+      await this.setCamera('environment');  // Bayou = REAR
     } else if (tab === 'photo') {
       this.showOnly(this.cameraView);
-      await this.ensureLens();       // same lens
-      await this.setCamera('user');  // Photo Booth = selfie as well
+      await this.ensureLens();              // same lens
+      await this.setCamera('user');         // Photo Booth = SELFIE
     } else if (tab === 'bag') {
       this.renderBackpack();
       this.showOnly(this.backpackView);
@@ -224,12 +224,11 @@ class SnapLensApp {
     const reader = new FileReader();
     reader.onload = () => {
       photoStore.add(String(reader.result));
-      // If Backpack is visible, refresh it
       if (!this.backpackView.classList.contains('hidden')) this.renderBackpack();
     };
     reader.readAsDataURL(this.lastCapturedBlob);
 
-    // Optional: upload to Supabase (kept from your friend’s code)
+    // Optional: upload to Supabase
     if (!supabase) return this.hidePreview();
     try {
       this.saveButton.textContent = '⏳'; this.saveButton.disabled = true;
@@ -267,7 +266,6 @@ class SnapLensApp {
       await this.setCamera(next);
     });
     this.btnToggleAspect?.addEventListener('click', () => {
-      // label only (layout is fullscreen)
       this.btnToggleAspect.textContent = this.btnToggleAspect.textContent === '3:4' ? '16:9' : '3:4';
     });
 
