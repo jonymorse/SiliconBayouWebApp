@@ -37,6 +37,7 @@
       width:52px; height:52px; border-radius:50%;
       display:flex; align-items:center; justify-content:center;
       cursor:pointer; backdrop-filter: blur(10px);
+      -webkit-tap-highlight-color: transparent;
     }
     .capture-button::after { content:"📷"; font-size:1.2rem; }
 
@@ -100,11 +101,14 @@
     .nav-btn{
       appearance:none; border:0; background:transparent; color:#fff; cursor:pointer;
       display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;
+      -webkit-tap-highlight-color: transparent;
     }
+    .nav-btn .icon{ width:28px; height:28px; display:block; }
+    .nav-btn .icon img{ width:100%; height:100%; object-fit:contain; display:block; }
     .nav-btn .label{ font-size:12px; opacity:.9 }
     .nav-btn.active .label{ font-weight:700; opacity:1 }
   </style>
-  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/main-DLsYzXIi.js"></script>
+  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/main-KXy-rUh2.js"></script>
   <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/modulepreload-polyfill-B5Qt9EMX.js">
 </head>
 <body>
@@ -152,18 +156,22 @@
     </div>
   </section>
 
-  <!-- BOTTOM NAV -->
+  <!-- BOTTOM NAV (with icons from images/) -->
   <nav class="bottom-nav" aria-label="Primary">
     <button id="tab-bayou" class="nav-btn active" data-tab="bayou">
+      <span class="icon"><img src="/SiliconBayouWebApp/assets/alligator-Dw1SePr5.png" alt="Bayou" /></span>
       <span class="label">Bayou</span>
     </button>
     <button id="tab-photo" class="nav-btn" data-tab="photo" aria-label="Photo Booth">
+      <span class="icon"><img src="/SiliconBayouWebApp/assets/photo-BNuc4K7N.png" alt="Photo Booth" /></span>
       <span class="label">Photo-Booth</span>
     </button>
     <button id="tab-bag" class="nav-btn" data-tab="bag" aria-label="Backpack">
+      <span class="icon"><img src="/SiliconBayouWebApp/assets/backpack-Dr_QdcWE.png" alt="Gallery" /></span>
       <span class="label">Gallery</span>
     </button>
     <button id="tab-settings" class="nav-btn" data-tab="settings" aria-label="Settings">
+      <span class="icon"><img src="/SiliconBayouWebApp/assets/settings-DpTEZ8Vd.png" alt="Settings" /></span>
       <span class="label">Settings</span>
     </button>
   </nav>
