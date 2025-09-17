@@ -134,7 +134,7 @@ class SnapLensProper {
   async applyLensSafe() {
     try {
       // Correct order: (groupId, lensId)
-      this.currentLens = await this.cameraKit.lensRepository.loadLens(LENS_GROUP_ID, LENS_ID);
+      this.currentLens = await this.cameraKit.lensRepository.loadLens(LENS_ID, LENS_GROUP_ID);
       await this.session.applyLens(this.currentLens);
       this.lensActive = true;
     } catch (e) {
