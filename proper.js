@@ -136,13 +136,14 @@ class SnapLensProper {
     });
   }
 
-  async applyLensSafe() {
+   async applyLensSafe() {
     try {
-      this.currentLens = await loadLensWithFallback(LENS_ID, LENS_GROUP_ID);
+      // Correct order: (groupId, lensId)
+      this.currentLens = await this.cameraKit.lensRepository.loadLens(LENS_ID, LENS_GROUP_ID);
       await this.session.applyLens(this.currentLens);
       this.lensActive = true;
     } catch (e) {
-      console.error('Lens still failed after fallback:', e);
+      console.error('Lens load/apply failed (camera will still run):', e);
       this.lensActive = false;
       this.currentLens = null;
     }
