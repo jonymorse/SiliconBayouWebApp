@@ -1,314 +1,405 @@
 import { bootstrapCameraKit, createMediaStreamSource, Transform2D } from '@snap/camera-kit';
 
-/* ---------------- Supabase (optional upload) ---------------- */
+/* ---------- Supabase (optional upload) ---------- */
 const SUPABASE_URL = 'https://fwcdxvnpcpyxywbjwyaa.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3Y2R4dm5wY3B5eHl3Ymp3eWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5OTg5NjMsImV4cCI6MjA3MzU3NDk2M30.XEfxRw39wp5jMs3YWFszhFZ1_ZXOilraSBN8R1e3LOI';
+const SUPABASE_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3Y2R4dm5wY3B5eHl3Ymp3eWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5OTg5NjMsImV4cCI6MjA3MzU3NDk2M30.XEfxRw39wp5jMs3YWFszhFZ1_ZXOilraSBN8R1e3LOI';
 const BUCKET = 'gallerybucket';
-let supabase; // created lazily
+let supabase;
 
-/* ---------------- Shared lens (same for Bayou & Photo) ----------------
-   NOTE: loadLens takes (groupId, lensId). */
-const LENS_GROUP_ID = '1d5338a5-2299-44e8-b41d-e69573824971';
-const LENS_ID       = '6f32833b-0365-4e96-8861-bb2b332a82ec';
-const API_TOKEN     = 'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M';
-
-/* ---------------- Local photo store (for Backpack grid) ---------------- */
-const photoStore = {
-  key: 'bag-photos',
-  get() { try { return JSON.parse(localStorage.getItem(this.key) || '[]'); } catch { return []; } },
-  set(list) { localStorage.setItem(this.key, JSON.stringify(list)); },
-  add(dataUrl) {
-    const list = this.get();
-    const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `p_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    list.unshift({ id, ts: Date.now(), dataUrl });
-    this.set(list);
-  },
-  clear() { this.set([]); }
+/* ---------- Lens config (same lens for both tabs) ---------- */
+const LENS_CONFIG = {
+  API_TOKEN:
+    'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M',
+  // NOTE: loadLens expects (groupId, lensId)
+  LENS_ID: '6f32833b-0365-4e96-8861-bb2b332a82ec',
+  LENS_GROUP_ID: '1d5338a5-2299-44e8-b41d-e69573824971',
 };
 
-/* ---------------- App class ---------------- */
-class SnapLensApp {
+class SnapLensProper {
   constructor() {
-    /* camera + lens */
-    this.cameraKit = null;
-    this.session = null;
-    this.mediaStream = null;
-    this.currentFacingMode = 'environment'; // Bayou defaults to REAR
-    this.currentLens = null;
-
-    /* canvases & UI */
+    /* DOM */
     this.outputContainer = document.getElementById('canvas-output');
-    this.liveCanvas = null;
-
-    /* capture & preview */
     this.captureButton = document.getElementById('captureButton');
     this.photoPreview = document.getElementById('photoPreview');
     this.previewImage = document.getElementById('previewImage');
     this.retakeButton = document.getElementById('retakeButton');
     this.saveButton = document.getElementById('saveButton');
-    this.lastCapturedBlob = null;
-
-    /* nav + views */
-    this.cameraView = document.getElementById('camera-view');
-    this.backpackView = document.getElementById('backpack-view');
-    this.settingsView = document.getElementById('settings-view');
-    this.navButtons = document.querySelectorAll('.nav-btn');
-
-    /* controls */
-    this.btnSwitchCam = document.getElementById('btn-switch-cam');
-    this.btnToggleAspect = document.getElementById('btn-toggle-aspect'); // label only; layout is fullscreen
-
-    /* audio */
     this.backgroundAudio = document.getElementById('backgroundAudio');
 
-    /* init */
-    this.initialize();
+    /* bottom nav (optional; will no-op if not present) */
+    this.tabBayou = document.getElementById('tab-bayou');
+    this.tabPhoto = document.getElementById('tab-photo');
+
+    /* camera state */
+    this.cameraKit = null;
+    this.session = null;
+    this.mediaStream = null;
+    this.currentFacingMode = 'environment'; // Bayou = BACK camera by default
+    this.currentLens = null;
+    this.lensActive = false;
+
+    /* helpers */
+    this.lastCapturedBlob = null;
+    this.lastTap = 0;
+    this.tapTimeout = null;
+
+    this.initializeApp();
   }
 
-  async initialize() {
-    await this.initSupabase();
-    this.wireUI();
-    await this.initCameraKit();
-    await this.ensureLens();
-    await this.setCamera('environment'); // Bayou starts on REAR
-    await this.session.play();
-    this.switchTab('bayou');             // show camera view
+  /* ---------------- boot ---------------- */
+  async initializeApp() {
+    await this.initializeSupabase();
+    this.setupCaptureButton();
+    this.setupPreviewControls();
+    this.setupDoubleTapGesture();
+    this.setupBackgroundAudio();
+    this.setupTabs(); // Bayou / Photo booth
+
+    await this.initializeCameraKit();
+
+    // Start camera first (rear)
+    await this.startCamera();
+
+    // Then load & apply lens (same lens used for both tabs)
+    await this.applyLensSafe();
+
+    // Start on Bayou tab if present
+    if (this.tabBayou) this.setActiveTab('bayou');
   }
 
-  async initSupabase() {
+  async initializeSupabase() {
     try {
       const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
       supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+      console.log('🟢 Supabase initialized');
     } catch (e) {
-      console.warn('Supabase not available (optional):', e);
+      console.warn('Supabase init skipped:', e);
     }
   }
 
-  async initCameraKit() {
-    this.cameraKit = await bootstrapCameraKit({ apiToken: API_TOKEN });
-    this.session = await this.cameraKit.createSession(); // use session.output.live
-
-    this.outputContainer.replaceWith(this.session.output.live);
-    this.liveCanvas = this.session.output.live;
-    this.liveCanvas.id = 'live-canvas';
-    this.liveCanvas.style.width = '100%';
-    this.liveCanvas.style.height = '100%';
-    this.liveCanvas.style.objectFit = 'cover';
-    this.liveCanvas.style.background = '#000';
-
-    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && 'ontouchend' in document);
-    const dpr = isiOS ? 1 : Math.min(window.devicePixelRatio || 1, 2);
-
-    const resizeLiveCanvas = () => {
-      const rect = this.liveCanvas.getBoundingClientRect();
-      this.liveCanvas.width = Math.round(rect.width * dpr);
-      this.liveCanvas.height = Math.round(rect.height * dpr);
-    };
-    new ResizeObserver(resizeLiveCanvas).observe(this.liveCanvas.parentElement);
-    window.addEventListener('orientationchange', resizeLiveCanvas);
-    window.addEventListener('load', resizeLiveCanvas);
-    resizeLiveCanvas();
-  }
-
-  async ensureLens() {
-    if (this.currentLens) return;
-    // Correct order: (groupId, lensId)
-    this.currentLens = await this.cameraKit.lensRepository.loadLens(LENS_GROUP_ID, LENS_ID);
-    await this.session.applyLens(this.currentLens);
-  }
-
-  async setCamera(facing) {
-    this.currentFacingMode = facing;
-    try { this.mediaStream?.getTracks().forEach(t => t.stop()); } catch {}
-
-    let stream;
+  /* ---------------- camera kit ---------------- */
+  async initializeCameraKit() {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: facing } },
-        audio: false
+      this.updateStatus('Initializing…');
+      this.cameraKit = await bootstrapCameraKit({ apiToken: LENS_CONFIG.API_TOKEN });
+      this.session = await this.cameraKit.createSession();
+
+      this.session.events.addEventListener('error', (ev) => {
+        console.error('Camera Kit error:', ev?.detail ?? ev);
       });
-    } catch {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+
+      // Attach live canvas – CSS controls size. DO NOT set .width/.height!
+      this.outputContainer.replaceWith(this.session.output.live);
+      this.liveCanvas = this.session.output.live;
+      this.liveCanvas.id = 'live-canvas';
+      Object.assign(this.liveCanvas.style, {
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        background: '#000',
+        display: 'block',
+      });
+
+      this.updateStatus('Ready');
+    } catch (e) {
+      console.error('Failed to init Camera Kit:', e);
+      this.updateStatus('Init error');
+    }
+  }
+
+  async startCamera() {
+    try {
+      this.updateStatus('Starting camera…');
+
+      // Preferred constraints
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640, max: 1280 },
+          height: { ideal: 480, max: 720 },
+          facingMode: { exact: this.currentFacingMode },
+          frameRate: { ideal: 30, max: 30 },
+        },
+        audio: false,
+      });
+
+      const source = createMediaStreamSource(this.mediaStream);
+      await this.session.setSource(source);
+      if (this.currentFacingMode === 'user') source.setTransform(Transform2D.MirrorX);
+
+      this.session.play('live');
+      this.updateStatus('Camera ready!');
+    } catch (error) {
+      console.warn('Primary constraints failed, trying fallback:', error?.name || error);
+      await this.tryFallbackCamera();
+    }
+  }
+
+  async tryFallbackCamera() {
+    try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: this.currentFacingMode },
+        audio: false,
+      });
+
+      const source = createMediaStreamSource(this.mediaStream);
+      await this.session.setSource(source);
+      if (this.currentFacingMode === 'user') source.setTransform(Transform2D.MirrorX);
+
+      this.session.play('live');
+      this.updateStatus('Camera started!');
+    } catch (fallbackError) {
+      console.error('Fallback camera failed:', fallbackError);
+      this.updateStatus('Unable to access camera');
+    }
+  }
+
+  async applyLensSafe() {
+    try {
+      this.updateStatus('Loading lens…');
+      // Correct order: (groupId, lensId)
+      this.currentLens = await this.cameraKit.lensRepository.loadLens(
+        LENS_CONFIG.LENS_GROUP_ID,
+        LENS_CONFIG.LENS_ID,
+      );
+      await this.session.applyLens(this.currentLens);
+      this.lensActive = true;
+      this.updateStatus('AR active!');
+    } catch (e) {
+      console.error('Lens load/apply failed (camera will still run):', e);
+      this.updateStatus('Lens unavailable');
+      this.lensActive = false;
+      this.currentLens = null;
+    }
+  }
+
+  async switchCamera() {
+    if (!this.session) return;
+    try {
+      // stop previous stream
+      this.mediaStream?.getTracks().forEach((t) => t.stop());
+
+      this.currentFacingMode =
+        this.currentFacingMode === 'user' ? 'environment' : 'user';
+
+      // Their original approach: reload when going to back camera
+      if (this.currentFacingMode === 'environment') {
+        console.log('Switching to back camera – reloading page to avoid issues…');
+        setTimeout(() => window.location.reload(), 300);
+        return;
+      }
+
+      // Otherwise, start camera and re-apply lens if active
+      await this.startCamera();
+      if (this.lensActive && this.currentLens) {
+        await this.session.applyLens(this.currentLens);
+      }
+    } catch (e) {
+      console.error('Switch failed:', e);
+      this.currentFacingMode =
+        this.currentFacingMode === 'user' ? 'environment' : 'user';
+    }
+  }
+
+  /* ---------------- tabs (Bayou/Photo) ---------------- */
+  setupTabs() {
+    if (this.tabBayou) {
+      this.tabBayou.addEventListener('click', async () => {
+        this.setActiveTab('bayou');
+        this.currentFacingMode = 'environment'; // BACK
+        await this.startCamera();
+        if (this.lensActive && this.currentLens) await this.session.applyLens(this.currentLens);
+      });
     }
 
-    this.mediaStream = stream;
-    const source = createMediaStreamSource(stream);
-    await this.session.setSource(source);
-    source.setTransform(facing === 'user' ? Transform2D.MirrorX : Transform2D.Identity);
+    if (this.tabPhoto) {
+      this.tabPhoto.addEventListener('click', async () => {
+        this.setActiveTab('photo');
+        this.currentFacingMode = 'user'; // SELFIE
+        await this.startCamera();
+        if (this.lensActive && this.currentLens) await this.session.applyLens(this.currentLens);
+      });
+    }
   }
 
-  /* ---------------- Navigation ---------------- */
-  showOnly(el) {
-    [this.cameraView, this.backpackView, this.settingsView].forEach(v => v.classList.add('hidden'));
-    el.classList.remove('hidden');
-  }
-
-  setActive(tab) {
-    this.navButtons.forEach(b => b.classList.remove('active'));
+  setActiveTab(tab) {
+    document.querySelectorAll('.nav-btn').forEach((b) => b.classList.remove('active'));
     document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   }
 
-  async switchTab(tab) {
-    this.setActive(tab);
-    if (tab === 'bayou') {
-      this.showOnly(this.cameraView);
-      await this.ensureLens();
-      await this.setCamera('environment');  // Bayou = REAR
-    } else if (tab === 'photo') {
-      this.showOnly(this.cameraView);
-      await this.ensureLens();              // same lens
-      await this.setCamera('user');         // Photo Booth = SELFIE
-    } else if (tab === 'bag') {
-      this.renderBackpack();
-      this.showOnly(this.backpackView);
-    } else {
-      this.showOnly(this.settingsView);
-    }
-  }
-
-  /* ---------------- Backpack render ---------------- */
-  renderBackpack() {
-    const photos = photoStore.get();
-    const grid = document.getElementById('bag-grid');
-    const empty = document.getElementById('bag-empty');
-    grid.innerHTML = '';
-
-    if (!photos.length) {
-      empty.classList.remove('hidden');
-      return;
-    }
-    empty.classList.add('hidden');
-
-    photos.forEach(p => {
-      const item = document.createElement('div');
-      item.className = 'bag-item';
-      item.innerHTML = `
-        <div class="bag-thumb" style="background-image:url('${p.dataUrl}')"></div>
-        <div>Photo • ${new Date(p.ts).toLocaleDateString()}</div>
-      `;
-      grid.appendChild(item);
+  /* ---------------- capture / preview / save ---------------- */
+  setupCaptureButton() {
+    if (!this.captureButton) return;
+    this.captureButton.addEventListener('click', () => {
+      if (this.photoPreview?.classList.contains('show')) {
+        this.hidePhotoPreview();
+      } else {
+        this.capturePhoto();
+      }
     });
   }
 
-  /* ---------------- Capture / Preview / Save ---------------- */
-  capturePhoto() {
-    if (!this.liveCanvas) return;
-    const tmp = document.createElement('canvas');
-    const ctx = tmp.getContext('2d');
-    tmp.width = this.liveCanvas.width;
-    tmp.height = this.liveCanvas.height;
-    ctx.drawImage(this.liveCanvas, 0, 0);
-
-    tmp.toBlob((blob) => {
-      if (!blob) return;
-      this.lastCapturedBlob = blob;
-      const url = URL.createObjectURL(blob);
-      this.previewImage.src = url;
-      this.photoPreview.classList.add('show');
-    }, 'image/jpeg', 0.9);
+  setupPreviewControls() {
+    this.retakeButton?.addEventListener('click', () => this.hidePhotoPreview());
+    this.saveButton?.addEventListener('click', () => this.saveToSupabase());
   }
 
-  hidePreview() {
-    this.photoPreview.classList.remove('show');
-    if (this.previewImage.src) URL.revokeObjectURL(this.previewImage.src);
-    this.previewImage.src = '';
+  capturePhoto() {
+    if (!this.session || !this.liveCanvas) return;
+
+    try {
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Use the current CSS size (don’t touch liveCanvas.width/height)
+      const rect = this.liveCanvas.getBoundingClientRect();
+      tempCanvas.width = Math.max(1, Math.round(rect.width));
+      tempCanvas.height = Math.max(1, Math.round(rect.height));
+
+      tempCtx.drawImage(this.liveCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+
+      tempCanvas.toBlob((blob) => {
+        if (!blob) return console.error('Failed to create photo blob');
+        this.lastCapturedBlob = blob;
+        const url = URL.createObjectURL(blob);
+        this.previewImage.src = url;
+        this.showPhotoPreview();
+
+        // small click feedback
+        this.captureButton.style.transform = 'scale(0.95)';
+        setTimeout(() => (this.captureButton.style.transform = ''), 150);
+      }, 'image/png');
+    } catch (e) {
+      console.error('Photo capture failed:', e);
+    }
+  }
+
+  showPhotoPreview() {
+    this.photoPreview?.classList.add('show');
+    if (this.captureButton) this.captureButton.style.opacity = '0.8';
+  }
+
+  hidePhotoPreview() {
+    this.photoPreview?.classList.remove('show');
+    if (this.captureButton) this.captureButton.style.opacity = '1';
+    if (this.saveButton) {
+      this.saveButton.textContent = '📤';
+      this.saveButton.disabled = false;
+    }
+    if (this.previewImage?.src) {
+      URL.revokeObjectURL(this.previewImage.src);
+      this.previewImage.src = '';
+    }
     this.lastCapturedBlob = null;
-    this.saveButton.textContent = '📤';
-    this.saveButton.disabled = false;
   }
 
   async saveToSupabase() {
-    if (!this.lastCapturedBlob) return;
-
-    // Add to local Backpack immediately
-    const reader = new FileReader();
-    reader.onload = () => {
-      photoStore.add(String(reader.result));
-      if (!this.backpackView.classList.contains('hidden')) this.renderBackpack();
-    };
-    reader.readAsDataURL(this.lastCapturedBlob);
-
-    // Optional: upload to Supabase
-    if (!supabase) return this.hidePreview();
+    if (!this.lastCapturedBlob || !supabase) {
+      console.error('Cannot save: missing photo or Supabase not ready');
+      return;
+    }
     try {
-      this.saveButton.textContent = '⏳'; this.saveButton.disabled = true;
-      const filename = `snap-${Date.now()}.jpg`;
-      const { error } = await supabase.storage.from(BUCKET).upload(filename, this.lastCapturedBlob, { contentType: 'image/jpeg' });
+      this.saveButton.textContent = '⏳';
+      this.saveButton.disabled = true;
+
+      const filename = `snap-capture-${Date.now()}.png`;
+      const { error } = await supabase.storage
+        .from(BUCKET)
+        .upload(filename, this.lastCapturedBlob, { contentType: 'image/png' });
+
       if (error) throw error;
+
       this.saveButton.textContent = '✅';
-      setTimeout(() => this.hidePreview(), 600);
+      setTimeout(() => this.hidePhotoPreview(), 900);
     } catch (e) {
       console.error('Supabase upload failed:', e);
       this.saveButton.textContent = '❌';
-      setTimeout(() => { this.saveButton.textContent = '📤'; this.saveButton.disabled = false; }, 1200);
+      setTimeout(() => {
+        this.saveButton.textContent = '📤';
+        this.saveButton.disabled = false;
+      }, 1500);
     }
   }
 
-  /* ---------------- Reset ---------------- */
-  async resetApp() {
-    photoStore.clear();
-    try { this.mediaStream?.getTracks().forEach(t => t.stop()); } catch {}
-    try { await this.session?.pause?.(); } catch {}
-    window.location.reload();
+  /* ---------------- gestures & audio ---------------- */
+  setupDoubleTapGesture() {
+    const cameraContainer = document.querySelector('.camera-container');
+    if (!cameraContainer) return;
+
+    cameraContainer.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.handleDoubleTap();
+    });
+    cameraContainer.addEventListener('click', (e) => {
+      if (!e.target.closest('button')) this.handleDoubleTap();
+    });
   }
 
-  /* ---------------- UI wiring ---------------- */
-  wireUI() {
-    // Bottom nav
-    document.getElementById('tab-bayou')?.addEventListener('click', () => this.switchTab('bayou'));
-    document.getElementById('tab-photo')?.addEventListener('click', () => this.switchTab('photo'));
-    document.getElementById('tab-bag')?.addEventListener('click', () => this.switchTab('bag'));
-    document.getElementById('tab-settings')?.addEventListener('click', () => this.switchTab('settings'));
+  handleDoubleTap() {
+    const now = Date.now();
+    const gap = now - this.lastTap;
 
-    // Overlay controls
-    this.btnSwitchCam?.addEventListener('click', async () => {
-      const next = this.currentFacingMode === 'user' ? 'environment' : 'user';
-      await this.setCamera(next);
-    });
-    this.btnToggleAspect?.addEventListener('click', () => {
-      this.btnToggleAspect.textContent = this.btnToggleAspect.textContent === '3:4' ? '16:9' : '3:4';
-    });
+    if (this.tapTimeout) {
+      clearTimeout(this.tapTimeout);
+      this.tapTimeout = null;
+    }
 
-    // Capture + preview
-    this.captureButton?.addEventListener('click', () => {
-      if (this.photoPreview.classList.contains('show')) this.hidePreview();
-      else this.capturePhoto();
-    });
-    this.retakeButton?.addEventListener('click', () => this.hidePreview());
-    this.saveButton?.addEventListener('click', () => this.saveToSupabase());
+    if (gap > 0 && gap < 300) {
+      this.switchCamera();
+      this.lastTap = 0;
+    } else {
+      this.lastTap = now;
+      this.tapTimeout = setTimeout(() => (this.lastTap = 0), 300);
+    }
+  }
 
-    // Settings → Reset
-    document.getElementById('btn-reset-app')?.addEventListener('click', () => {
-      if (confirm('Reset the app and clear your gallery?')) this.resetApp();
-    });
+  setupBackgroundAudio() {
+    if (!this.backgroundAudio) return;
 
-    // Double-tap anywhere on camera to switch cameras
-    const cam = document.querySelector('.camera-container');
-    let lastTap = 0, timeout;
-    const handleTap = async () => {
-      const now = Date.now();
-      if (timeout) { clearTimeout(timeout); timeout = null; }
-      if (now - lastTap < 300) {
-        const next = this.currentFacingMode === 'user' ? 'environment' : 'user';
-        await this.setCamera(next);
-        lastTap = 0;
-      } else {
-        lastTap = now;
-        timeout = setTimeout(() => lastTap = 0, 300);
-      }
+    this.backgroundAudio.volume = 0.2;
+    this.backgroundAudio.loop = true;
+
+    const startAudio = async () => {
+      try {
+        await this.backgroundAudio.play();
+        document.removeEventListener('touchstart', startAudio);
+        document.removeEventListener('click', startAudio);
+        document.removeEventListener('keydown', startAudio);
+      } catch {}
     };
-    cam.addEventListener('touchend', (e) => { e.preventDefault(); handleTap(); });
-    cam.addEventListener('click', (e) => { if (!e.target.closest('button')) handleTap(); });
+
+    document.addEventListener('touchstart', startAudio, { once: true });
+    document.addEventListener('click', startAudio, { once: true });
+    document.addEventListener('keydown', startAudio, { once: true });
+
+    // best effort (may be blocked)
+    this.backgroundAudio.play().catch(() => {});
+  }
+
+  /* ---------------- utils ---------------- */
+  updateStatus(msg) {
+    if (this.outputContainer && this.outputContainer.tagName === 'DIV') {
+      this.outputContainer.textContent = msg;
+    }
+    console.log(msg);
   }
 
   destroy() {
-    try { this.mediaStream?.getTracks().forEach(t => t.stop()); } catch {}
-    try { this.session?.destroy?.(); } catch {}
+    try {
+      this.mediaStream?.getTracks().forEach((t) => t.stop());
+    } catch {}
+    try {
+      this.session?.destroy?.();
+    } catch {}
+    if (this.backgroundAudio) {
+      this.backgroundAudio.pause();
+      this.backgroundAudio.currentTime = 0;
+    }
   }
 }
 
-/* boot */
+/* Boot */
 document.addEventListener('DOMContentLoaded', () => {
-  window.snapApp = new SnapLensApp();
+  window.snapApp = new SnapLensProper();
 });
 window.addEventListener('beforeunload', () => window.snapApp?.destroy?.());
