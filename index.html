@@ -1,344 +1,150 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
     <title>AR Camera</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      /* ----- your existing fullscreen camera styles (shortened to essentials) ----- */
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background:#000; color:#fff; min-height:100vh; min-height:100dvh; overflow:hidden;
+      }
+      .camera-container {
+        position: fixed; inset: 0; width:100vw; height:100dvh; background:#000; overflow:hidden;
+      }
+      #live-canvas { width:100% !important; height:100% !important; object-fit:cover; display:block; background:#000; }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #000000;
-            min-height: 100vh;
-            min-height: 100dvh; /* Dynamic viewport height for mobile */
-            display: flex;
-            flex-direction: column;
-            color: #ffffff;
-            overflow: hidden;
-        }
+      /* ----- views ----- */
+      .view.hidden { display:none !important; }
+      .section-title{ margin:14px 4px 10px; font-size:22px }
+      .muted{ color:#bbb } .center{ text-align:center }
 
-        .app {
-            width: 100%;
-            height: 100vh;
-            height: 100dvh; /* Dynamic viewport height for mobile */
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
+      /* overlay tool buttons */
+      .tool-btn{
+        appearance:none; border:1px solid rgba(255,255,255,.28);
+        background: rgba(0,0,0,.35); color:#fff; padding:8px 10px; border-radius:10px; font-weight:700;
+      }
 
-        .camera-container {
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            position: relative;
-            background: #000;
+      /* capture button */
+      .primary-btn{
+        appearance:none; border:0; cursor:pointer; padding:10px 16px; border-radius:10px; font-weight:700;
+        background:#7df2c9; color:#0b0b0b;
+      }
 
-            /* Add these: */
-            aspect-ratio: 9 / 16;   /* lock to portrait shape */
-            overflow: hidden;       /* clip overflow if needed */
-        }
+      /* ----- bottom nav (same look&feel) ----- */
+      .bottom-nav{
+        position:fixed; left:0; right:0; bottom:0; z-index:20;
+        display:grid; grid-template-columns:repeat(4,1fr);
+        background: rgba(18,19,23,.85);
+        backdrop-filter: blur(10px);
+        border-top:1px solid rgba(255,255,255,.12);
+        padding:8px 10px calc(10px + env(safe-area-inset-bottom));
+        min-height:72px;
+      }
+      .nav-btn{
+        appearance:none; border:0; background:transparent; color:#fff;
+        display:flex; flex-direction:column; align-items:center; justify-content:center;
+        gap:6px; padding:6px 4px; cursor:pointer; min-width:0;
+      }
+      .nav-btn .icon{ width:28px; height:28px; display:block; }
+      .nav-btn .icon img{ width:100%; height:100%; object-fit:contain; display:block; }
+      .nav-btn .label{ font-size:12px; line-height:1; opacity:.9 }
+      .nav-btn.active .label{ font-weight:700; opacity:1 }
 
+      /* backpack grid */
+      .bag-grid{
+        position:relative; z-index:1;
+        max-width:980px; margin: 88px auto 90px; /* leave room for bottom nav */
+        display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(110px,1fr));
+      }
+      .bag-item{ background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:10px; text-align:center; }
+      .bag-thumb{ width:100%; aspect-ratio:1/1; border-radius:10px; background:#111 center/cover no-repeat; margin-bottom:8px; }
 
-        #canvas-output {
-            width: 100%;
-            height: 100%;
-            background: #1a1a1a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ffffff;
-            font-size: 1rem;
-            object-fit: cover;
-        }
+      /* photo preview overlay (kept from your friend’s code) */
+      .photo-preview{ position:fixed; inset:0; background:#000; display:none; z-index:200; flex-direction:column; justify-content:center; align-items:center; }
+      .photo-preview.show{ display:flex; }
+      .photo-preview img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; }
+      .photo-preview-controls{ position:fixed; bottom:calc(90px + env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); display:flex; gap:20px; z-index:201; }
+      .preview-button{ background:#fff; color:#000; border:none; border-radius:25px; padding:12px 20px; font-weight:700; }
 
-
-        .controls {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            display: none; /* Hide all controls */
-            justify-content: space-around;
-            align-items: center;
-            padding: 20px;
-            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        /* Capture Button */
-        .capture-button {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 59, 48, 0.8);
-            color: white;
-            border: 2px solid rgba(255, 59, 48, 0.9);
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        .capture-button:hover,
-        .capture-button:active {
-            background: rgba(255, 59, 48, 0.9);
-            border-color: rgba(255, 59, 48, 1);
-            transform: scale(1.05);
-        }
-
-        .capture-button:disabled {
-            background: rgba(128, 128, 128, 0.3);
-            border-color: rgba(128, 128, 128, 0.3);
-            color: #999;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .capture-button::after {
-            content: "📷";
-        }
-
-        /* Photo Preview Overlay */
-        .photo-preview {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #000;
-            display: none;
-            z-index: 200;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .photo-preview.show {
-            display: flex;
-        }
-
-        .photo-preview img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            border-radius: 8px;
-        }
-
-        .photo-preview-controls {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 20px;
-            z-index: 201;
-        }
-
-        .preview-button {
-            background: rgba(255, 255, 255, 0.9);
-            color: #000;
-            border: none;
-            border-radius: 25px;
-            padding: 12px 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        .preview-button:hover,
-        .preview-button:active {
-            background: rgba(255, 255, 255, 1);
-            transform: scale(1.05);
-        }
-
-        .preview-button.download {
-            background: rgba(0, 122, 255, 0.9);
-            color: white;
-        }
-
-        .preview-button.download:hover,
-        .preview-button.download:active {
-            background: rgba(0, 122, 255, 1);
-        }
-
-
-
-        button {
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            color: white;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            font-weight: 600;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        button:hover,
-        button:active {
-            background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
-            transform: scale(1.05);
-        }
-
-        button:disabled {
-            background: rgba(128, 128, 128, 0.3);
-            border-color: rgba(128, 128, 128, 0.3);
-            color: #999;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        #capturePhoto {
-            background: rgba(255, 59, 48, 0.8);
-            border-color: rgba(255, 59, 48, 0.9);
-            width: 70px;
-            height: 70px;
-        }
-
-        #capturePhoto:hover,
-        #capturePhoto:active {
-            background: rgba(255, 59, 48, 0.9);
-            border-color: rgba(255, 59, 48, 1);
-        }
-
-        /* Button icons using emoji/text */
-        #startCamera::after {
-            content: "▶";
-            font-size: 1.2rem;
-        }
-
-        #switchCamera::after {
-            content: "🔄";
-            font-size: 1.1rem;
-        }
-
-        #toggleLens::after {
-            content: "✨";
-            font-size: 1.1rem;
-        }
-
-        #capturePhoto::after {
-            content: "📷";
-            font-size: 1.3rem;
-        }
-
-        /* Safe area handling for devices with notches */
-        @supports (padding: max(0px)) {
-            .controls {
-                padding-bottom: max(20px, env(safe-area-inset-bottom));
-            }
-            
-            .capture-button {
-                top: max(20px, env(safe-area-inset-top));
-                right: max(20px, env(safe-area-inset-right));
-            }
-        }
-
-        /* Landscape orientation adjustments */
-        @media (orientation: landscape) {
-            .controls {
-                flex-direction: column;
-                right: 0;
-                left: auto;
-                width: 100px;
-                height: 100vh;
-                padding: 20px 15px;
-                background: linear-gradient(to left, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
-                justify-content: center;
-                gap: 20px;
-            }
-
-            button {
-                width: 55px;
-                height: 55px;
-            }
-
-            #capturePhoto {
-                width: 65px;
-                height: 65px;
-            }
-        }
-
-        /* Very small screens */
-        @media (max-width: 360px) {
-            button {
-                width: 50px;
-                height: 50px;
-                font-size: 0.8rem;
-            }
-
-            #capturePhoto {
-                width: 60px;
-                height: 60px;
-            }
-
-            .controls {
-                padding: 15px;
-            }
-        }
+      /* small overlay tools on camera (top-right) */
+      .overlay-tools{ position:fixed; top:12px; right:12px; display:flex; gap:8px; z-index:30; }
+      .capture-wrap{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(84px + env(safe-area-inset-bottom)); z-index:30; }
     </style>
-</head>
-<body>
-    <div class="app">
-        <div class="camera-container">
-            <div id="canvas-output">
-                Tap ▶ to start camera
-            </div>
+  </head>
+  <body>
+    <!-- CAMERA VIEW (default) -->
+    <main id="camera-view" class="view" role="main" aria-live="polite" style="padding:0;">
+      <div class="camera-container">
+        <div id="canvas-output">Starting…</div>
+
+        <!-- overlay controls -->
+        <div class="overlay-tools">
+          <button id="btn-toggle-aspect" class="tool-btn" title="Toggle Aspect">3:4</button>
+          <button id="btn-switch-cam" class="tool-btn" title="Switch Camera">Rear</button>
         </div>
-        
-        <!-- Capture Button -->
-        <button class="capture-button" id="captureButton" title="Capture Photo"></button>
-        
-        <!-- Photo Preview Overlay -->
-        <div class="photo-preview" id="photoPreview">
-            <img id="previewImage" alt="Captured Photo">
-            <div class="photo-preview-controls">
-                <button class="preview-button" id="retakeButton">✕</button>
-                <button class="preview-button download" id="saveButton">📤</button>
-            </div>
+        <div class="capture-wrap">
+          <button id="captureButton" class="primary-btn">Capture</button>
         </div>
-        
-        <div class="controls">
-            <button id="startCamera" title="Start Camera"></button>
-            <button id="switchCamera" title="Switch Camera"></button>
-            <button id="toggleLens" title="Toggle AR Lens"></button>
-            <button id="capturePhoto" title="Capture Photo"></button>
+      </div>
+
+      <!-- Photo Preview -->
+      <div class="photo-preview" id="photoPreview">
+        <img id="previewImage" alt="Captured Photo" />
+        <div class="photo-preview-controls">
+          <button class="preview-button" id="retakeButton">✕</button>
+          <button class="preview-button" id="saveButton">📤</button>
         </div>
-    </div>
-    
-    <!-- Background Audio -->
+      </div>
+    </main>
+
+    <!-- BACKPACK -->
+    <section id="backpack-view" class="view hidden" aria-label="Backpack">
+      <h1 class="section-title" style="margin:84px 16px 8px;">Backpack</h1>
+      <div id="bag-grid" class="bag-grid"></div>
+      <p class="muted center" id="bag-empty" style="margin-bottom:90px;">You haven’t collected anything yet.</p>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="settings-view" class="view hidden" aria-label="Settings" style="padding:88px 16px 96px;">
+      <h1 class="section-title">Settings</h1>
+      <div style="display:flex; flex-direction:column; gap:12px; max-width:980px; margin:10px auto 0;">
+        <button id="btn-reset-app" class="tool-btn" style="padding:12px 14px; border-radius:12px; background:rgba(220,0,0,.25); border-color:rgba(220,0,0,.4);">
+          Reset App (Clear Gallery)
+        </button>
+      </div>
+    </section>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav" aria-label="Primary">
+      <button id="tab-bayou" class="nav-btn active" data-tab="bayou">
+        <span class="icon"><img src="images/alligator.png" alt="Bayou" /></span>
+        <span class="label">Bayou</span>
+      </button>
+      <button id="tab-photo" class="nav-btn" data-tab="photo">
+        <span class="icon"><img src="images/photo.png" alt="Photo-Booth" /></span>
+        <span class="label">Photo-Booth</span>
+      </button>
+      <button id="tab-bag" class="nav-btn" data-tab="bag">
+        <span class="icon"><img src="images/backpack.png" alt="Backpack" /></span>
+        <span class="label">Gallery</span>
+      </button>
+      <button id="tab-settings" class="nav-btn" data-tab="settings">
+        <span class="icon"><img src="images/settings.png" alt="Settings" /></span>
+        <span class="label">Settings</span>
+      </button>
+    </nav>
+
+    <!-- Background Audio (kept) -->
     <audio id="backgroundAudio" loop preload="auto">
-        <source src="bayouaudio_fixed.mp3" type="audio/mp3">
-        Your browser does not support the audio element.
+      <source src="bayouaudio_fixed.mp3" type="audio/mp3" />
     </audio>
-    
+
     <script type="module" src="./proper.js"></script>
-</body>
+  </body>
 </html>
