@@ -8,9 +8,9 @@ const BUCKET = 'gallerybucket';
 let supabase;
 
 /* ---------------- Lens config (same lens for both tabs) ----------------
-   NOTE: loadLens expects (groupId, lensId) */
-const LENS_GROUP_ID = '1d5338a5-2299-44e8-b41d-e69573824971';
-const LENS_ID       = '6f32833b-0365-4e96-8861-bb2b332a82ec';
+   NOTE: do not change ID values or their order */
+const LENS_GROUP_ID = '1d5338a5-2299-44e8-b41d-e69573824971'; // keep as provided
+const LENS_ID       = '6f32833b-0365-4e96-8861-bb2b332a82ec'; // keep as provided
 const API_TOKEN     =
   'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M';
 
@@ -85,10 +85,10 @@ class SnapLensProper {
   async initializeApp() {
     await this.initializeSupabase();
     this.wireMenu();
-    this.setupCaptureButton();
+    this.setupCaptureButton();      // << capture fixed here
     this.setupPreviewControls();
     this.setupBackgroundAudio();
-    this.setupDoubleTapGesture();
+    this.setupDoubleTapGesture();   // << double-tap no longer swallows button taps
     this.wireSettings();
 
     await this.initializeCameraKit();
@@ -133,7 +133,7 @@ class SnapLensProper {
 
   async applyLensSafe() {
     try {
-      // Correct order: (groupId, lensId)
+      // Keep your exact order and values:
       this.currentLens = await this.cameraKit.lensRepository.loadLens(LENS_ID, LENS_GROUP_ID);
       await this.session.applyLens(this.currentLens);
       this.lensActive = true;
@@ -244,13 +244,29 @@ class SnapLensProper {
 
   /* ---------------- Capture / Preview / Save ---------------- */
   setupCaptureButton() {
-    this.captureButton?.addEventListener('click', () => {
+    const btn = this.captureButton;
+    if (!btn) return;
+
+    const onPress = (ev) => {
+      // Stop propagation so container’s double-tap listener doesn’t see this
+      ev.stopPropagation?.();
+      // Prevent ghost click on iOS after touchend
+      ev.preventDefault?.();
+
       if (this.photoPreview?.classList.contains('show')) {
         this.hidePhotoPreview();
       } else {
         this.capturePhoto();
       }
-    });
+    };
+
+    if (window.PointerEvent) {
+      btn.addEventListener('pointerup', onPress);
+    } else {
+      // Fallback for very old browsers
+      btn.addEventListener('touchend', onPress, { passive: false });
+      btn.addEventListener('click', onPress);
+    }
   }
 
   setupPreviewControls() {
@@ -262,9 +278,10 @@ class SnapLensProper {
     if (!this.session || !this.liveCanvas) return;
 
     try {
-      // DO NOT write to liveCanvas.width/height. Read them safely.
-      const w = Math.max(1, this.liveCanvas.width || 1280);
-      const h = Math.max(1, this.liveCanvas.height || 720);
+      // Read current bitmap size; don't write to liveCanvas (OffscreenCanvas managed).
+      const rect = this.liveCanvas.getBoundingClientRect();
+      const w = Math.max(1, this.liveCanvas.width || Math.round(rect.width));
+      const h = Math.max(1, this.liveCanvas.height || Math.round(rect.height));
 
       const temp = document.createElement('canvas');
       temp.width = w;
@@ -272,13 +289,23 @@ class SnapLensProper {
       const ctx = temp.getContext('2d');
       ctx.drawImage(this.liveCanvas, 0, 0, w, h);
 
-      temp.toBlob((blob) => {
+      // Safari-safe toBlob
+      const toBlobSafe = (cv, cb) => {
+        if (cv.toBlob) return cv.toBlob(cb, 'image/png');
+        const dataUrl = cv.toDataURL('image/png');
+        const b = atob(dataUrl.split(',')[1]);
+        const arr = new Uint8Array(b.length);
+        for (let i = 0; i < b.length; i++) arr[i] = b.charCodeAt(i);
+        cb(new Blob([arr], { type: 'image/png' }));
+      };
+
+      toBlobSafe(temp, (blob) => {
         if (!blob) return;
         this.lastCapturedBlob = blob;
         const url = URL.createObjectURL(blob);
         this.previewImage.src = url;
         this.photoPreview.classList.add('show');
-      }, 'image/png');
+      });
     } catch (e) {
       console.error('Photo capture failed:', e);
     }
@@ -345,29 +372,33 @@ class SnapLensProper {
   setupDoubleTapGesture() {
     const cameraContainer = document.querySelector('.camera-container');
     if (!cameraContainer) return;
+
+    const handleTap = () => {
+      const now = Date.now();
+      const gap = now - this.lastTap;
+      if (this.tapTimeout) { clearTimeout(this.tapTimeout); this.tapTimeout = null; }
+      if (gap > 0 && gap < 300) {
+        const next = this.currentFacingMode === 'user' ? 'environment' : 'user';
+        this.startCamera(next).then(() => {
+          if (this.lensActive && this.currentLens) this.session.applyLens(this.currentLens);
+        });
+        this.lastTap = 0;
+      } else {
+        this.lastTap = now;
+        this.tapTimeout = setTimeout(() => (this.lastTap = 0), 300);
+      }
+    };
+
+    // Do NOT swallow button taps; don't call preventDefault
     cameraContainer.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      this.handleDoubleTap();
-    });
+      if (e.target instanceof Element && e.target.closest('button')) return;
+      handleTap();
+    }, { passive: true });
+
     cameraContainer.addEventListener('click', (e) => {
-      if (!e.target.closest('button')) this.handleDoubleTap();
+      if (e.target instanceof Element && e.target.closest('button')) return;
+      handleTap();
     });
-  }
-  handleDoubleTap() {
-    const now = Date.now();
-    const delta = now - this.lastTap;
-    if (this.tapTimeout) { clearTimeout(this.tapTimeout); this.tapTimeout = null; }
-    if (delta > 0 && delta < 300) {
-      // quick toggle
-      const next = this.currentFacingMode === 'user' ? 'environment' : 'user';
-      this.startCamera(next).then(() => {
-        if (this.lensActive && this.currentLens) this.session.applyLens(this.currentLens);
-      });
-      this.lastTap = 0;
-    } else {
-      this.lastTap = now;
-      this.tapTimeout = setTimeout(() => (this.lastTap = 0), 300);
-    }
   }
 
   setupBackgroundAudio() {
@@ -387,7 +418,6 @@ class SnapLensProper {
     document.addEventListener('click', startAudio, { once: true });
     document.addEventListener('keydown', startAudio, { once: true });
 
-    // best effort (may be blocked)
     this.backgroundAudio.play().catch(() => {});
   }
 
