@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
+    <title>Bayou AR - Unified</title>
+    <style>
+      html, body { 
+        height: 100%; 
+        margin: 0; 
+        background: #000; 
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      #app { 
+        position: fixed; 
+        inset: 0; 
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh; /* Dynamic viewport height for mobile */
+      }
+      canvas { 
+        width: 100% !important; 
+        height: 100% !important; 
+        object-fit: cover; 
+        display: block; 
+        background: #000;
+        border: 0 !important;
+        border-radius: 0 !important;
+        max-width: none !important;
+        max-height: none !important;
+      }
+      
+      /* Status overlay for debugging (optional) */
+      .status {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        right: 20px;
+        color: #fff;
+        background: rgba(0,0,0,0.5);
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        z-index: 10;
+        backdrop-filter: blur(10px);
+        display: none; /* Hidden by default */
+      }
+      
+      /* Show status only during initialization */
+      .initializing .status {
+        display: block;
+      }
+      
+      /* Safe area handling */
+      @supports (padding: max(0px)) {
+        #app {
+          padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="/SiliconBayouWebApp/assets/unified-CM6z-eQl.js"></script>
+    <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/modulepreload-polyfill-B5Qt9EMX.js">
+    <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/config-CNwrM9qc.js">
+  </head>
+  <body>
+    <div id="app" class="initializing">
+      <div class="status">
+        🎮 Bayou AR initializing...<br>
+        Double-tap to switch cameras
+      </div>
+    </div>
+    
+    <!-- Background Audio -->
+    <audio id="backgroundAudio" loop preload="auto">
+      <source src="/SiliconBayouWebApp/assets/bayouaudio_fixed-DZXiEN0d.mp3" type="audio/mp3">
+      Your browser does not support the audio element.
+    </audio>
+    
+  </body>
+</html>

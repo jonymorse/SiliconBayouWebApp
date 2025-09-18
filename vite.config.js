@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index.html'),
+        unified: resolve(__dirname, 'index_unified.html'),
         gallery: resolve(__dirname, 'supa.html')
       }
     }
