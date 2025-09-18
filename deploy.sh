@@ -14,6 +14,6 @@ echo "📝 Committing changes..."
 git commit -m "$commit_message"
 
 echo "🚀 Pushing to GitHub..."
-git push origin main
+git push 
 
 echo "✅ Deployed! Check https://jonymorse.github.io/SiliconBayouWebApp/ in 3-5 minutes"
