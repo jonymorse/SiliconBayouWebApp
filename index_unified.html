@@ -31,27 +31,6 @@
         max-height: none !important;
       }
       
-      /* Status overlay for debugging (optional) */
-      .status {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        right: 20px;
-        color: #fff;
-        background: rgba(0,0,0,0.5);
-        padding: 10px;
-        border-radius: 8px;
-        font-size: 0.9rem;
-        z-index: 10;
-        backdrop-filter: blur(10px);
-        display: none; /* Hidden by default */
-      }
-      
-      /* Show status only during initialization */
-      .initializing .status {
-        display: block;
-      }
-      
       /* Safe area handling */
       @supports (padding: max(0px)) {
         #app {
@@ -61,12 +40,7 @@
     </style>
   </head>
   <body>
-    <div id="app" class="initializing">
-      <div class="status">
-        🎮 Bayou AR initializing...<br>
-        Double-tap to switch cameras
-      </div>
-    </div>
+    <div id="app"></div>
     
     <!-- Background Audio -->
     <audio id="backgroundAudio" loop preload="auto">

@@ -185,20 +185,18 @@ class BayouARApp {
   }
   
   async initializeApp() {
-    // Check if this is a camera switch reload and load cached state
+    // Check if this is a camera switch reload
     if (isCameraSwitchReload()) {
+      // Only restore cache if this was triggered by camera switch
       const cachedState = loadStateFromCache();
       if (cachedState) {
         gameState = sanitizeState(cachedState);
         log('Restored state from cache after camera switch:', gameState);
       }
     } else {
-      // On normal page load, still try to load any existing cache
-      const cachedState = loadStateFromCache();
-      if (cachedState) {
-        gameState = sanitizeState(cachedState);
-        log('Restored state from cache on startup:', gameState);
-      }
+      // Manual refresh or normal page load - clear any existing cache
+      localStorage.removeItem(CACHE_KEY);
+      log('Manual refresh detected - cache cleared, starting fresh');
     }
     
     this.setupDoubleTapGesture();
@@ -209,8 +207,6 @@ class BayouARApp {
   
   async initializeCameraKit() {
     try {
-      this.updateStatus('Initializing Camera Kit...');
-      
       // Initialize Camera Kit with Remote API provider
       this.cameraKit = await bootstrapCameraKit(
         { apiToken: CONFIG.API_TOKEN, logger: 'console' },
@@ -227,7 +223,6 @@ class BayouARApp {
       
       this.session.events.addEventListener('error', (event) => {
         console.error('Camera Kit error:', event.detail);
-        this.updateStatus(`Error: ${event.detail?.error || event.detail}`);
       });
       
       // Replace the container with live canvas
@@ -258,17 +253,13 @@ class BayouARApp {
       window.addEventListener('load', resizeLiveCanvas);
       resizeLiveCanvas();
       
-      this.updateStatus('Camera Kit ready');
     } catch (error) {
       console.error('Failed to initialize Camera Kit:', error);
-      this.updateStatus(`Init error: ${error.message}`);
     }
   }
   
   async startCamera() {
     try {
-      this.updateStatus('Starting camera...');
-      
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: this.currentFacingMode },
@@ -285,13 +276,10 @@ class BayouARApp {
       }
       
       this.session.play('live');
-      this.updateStatus('Camera started');
     } catch (error) {
       console.error('Camera failed:', error);
       if (error.name === 'OverconstrainedError') {
         await this.tryFallbackCamera();
-      } else {
-        this.updateStatus('Camera unavailable');
       }
     }
   }
@@ -310,10 +298,8 @@ class BayouARApp {
       }
       
       this.session.play('live');
-      this.updateStatus('Camera started (fallback)');
     } catch (fallbackError) {
       console.error('Fallback camera failed:', fallbackError);
-      this.updateStatus('Unable to access camera');
     }
   }
   
@@ -380,20 +366,16 @@ class BayouARApp {
         await this.session.clearLens();
         this.lensActive = false;
         this.currentLens = null;
-        this.updateStatus('Lens removed');
       } else {
-        this.updateStatus('Loading lens...');
         this.currentLens = await this.cameraKit.lensRepository.loadLens(
           CONFIG.LENS_ID,
           CONFIG.LENS_GROUP_ID
         );
         await this.session.applyLens(this.currentLens);
         this.lensActive = true;
-        this.updateStatus('AR active!');
       }
     } catch (error) {
       console.error('Lens error:', error);
-      this.updateStatus(`Lens error: ${error.message}`);
       this.lensActive = false;
       this.currentLens = null;
     }
@@ -401,14 +383,11 @@ class BayouARApp {
   
   async autoStartWithLens() {
     try {
-      this.updateStatus('Auto-starting...');
       await this.startCamera();
       await new Promise(resolve => setTimeout(resolve, 1000));
       await this.toggleLens();
-      this.updateStatus('Ready! Double-tap to switch camera');
     } catch (error) {
       console.error('Auto-start failed:', error);
-      this.updateStatus('Auto-start failed');
     }
   }
   
