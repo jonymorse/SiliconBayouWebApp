@@ -7,32 +7,62 @@ const SUPABASE_KEY =
 const BUCKET = 'gallerybucket';
 let supabase;
 
-/* ---------------- Lens config (same lens for both tabs) ----------------
-   NOTE: do not change ID values or their order */
-const LENS_GROUP_ID = '1d5338a5-2299-44e8-b41d-e69573824971'; // keep as provided
-const LENS_ID       = '6f32833b-0365-4e96-8861-bb2b332a82ec'; // keep as provided
+/* ---------------- Lens config (same lens for both tabs) ---------------- */
+const LENS_GROUP_ID = '1d5338a5-2299-44e8-b41d-e69573824971';
+const LENS_ID       = '6f32833b-0365-4e96-8861-bb2b332a82ec';
 const API_TOKEN     =
   'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M';
 
-/* ---------------- Local gallery store (Backpack) ---------------- */
+/* ---------------- Small utils ---------------- */
+const dataUrlToBlob = async (dataUrl) => {
+  const res = await fetch(dataUrl);
+  return await res.blob();
+};
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+/* ---------------- Local gallery store (Backpack) ----------------
+   Each item: { id, ts, dataUrl, supaPath?, supaUrl? } */
 const photoStore = {
   key: 'bag-photos',
   get() { try { return JSON.parse(localStorage.getItem(this.key) || '[]'); } catch { return []; } },
   set(list) { localStorage.setItem(this.key, JSON.stringify(list)); },
+
   addDataUrl(dataUrl) {
     const list = this.get();
     const id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `p_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     list.unshift({ id, ts: Date.now(), dataUrl });
     this.set(list);
+    return id;
   },
+
   async addBlob(blob) {
     const dataUrl = await new Promise((res) => {
       const r = new FileReader();
       r.onload = () => res(String(r.result));
       r.readAsDataURL(blob);
     });
-    this.addDataUrl(dataUrl);
+    return this.addDataUrl(dataUrl); // returns id
   },
+
+  update(id, patch) {
+    const list = this.get();
+    const idx = list.findIndex(p => p.id === id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...patch };
+      this.set(list);
+    }
+  },
+
+  getById(id) { return this.get().find(p => p.id === id) || null; },
+
   clear() { this.set([]); },
 };
 
@@ -52,12 +82,19 @@ class SnapLensProper {
     this.tabBag      = document.getElementById('tab-bag');
     this.tabSettings = document.getElementById('tab-settings');
 
-    /* Capture & preview UI */
+    /* Capture & preview UI (camera) */
     this.captureButton = document.getElementById('captureButton');
     this.photoPreview  = document.getElementById('photoPreview');
     this.previewImage  = document.getElementById('previewImage');
     this.retakeButton  = document.getElementById('retakeButton');
     this.saveButton    = document.getElementById('saveButton');
+
+    /* Gallery preview overlay */
+    this.galleryPreview    = document.getElementById('galleryPreview');
+    this.galleryPreviewImg = document.getElementById('galleryPreviewImg');
+    this.shareEmailsInput  = document.getElementById('shareEmails');
+    this.shareByEmailBtn   = document.getElementById('shareByEmailBtn');
+    this.closeGalleryBtn   = document.getElementById('closeGalleryPreview');
 
     /* Settings */
     this.resetBtn = document.getElementById('btn-reset-app');
@@ -75,8 +112,12 @@ class SnapLensProper {
 
     /* Misc */
     this.lastCapturedBlob = null;
+    this.lastSavedId = null; // id in store for last saved photo
     this.lastTap = 0;
     this.tapTimeout = null;
+
+    /* Gallery state */
+    this.currentGalleryId = null;
 
     this.initializeApp();
   }
@@ -85,11 +126,13 @@ class SnapLensProper {
   async initializeApp() {
     await this.initializeSupabase();
     this.wireMenu();
-    this.setupCaptureButton();      // << capture fixed here
+    this.wireGalleryClicks();
+    this.setupCaptureButton();
     this.setupPreviewControls();
     this.setupBackgroundAudio();
-    this.setupDoubleTapGesture();   // << double-tap no longer swallows button taps
+    this.setupDoubleTapGesture();
     this.wireSettings();
+    this.wireGalleryPreview();
 
     await this.initializeCameraKit();
 
@@ -133,7 +176,7 @@ class SnapLensProper {
 
   async applyLensSafe() {
     try {
-      // Keep your exact order and values:
+      // Use your exact values:
       this.currentLens = await this.cameraKit.lensRepository.loadLens(LENS_ID, LENS_GROUP_ID);
       await this.session.applyLens(this.currentLens);
       this.lensActive = true;
@@ -234,6 +277,7 @@ class SnapLensProper {
     photos.forEach(p => {
       const item = document.createElement('div');
       item.className = 'bag-item';
+      item.dataset.id = p.id; // <-- store id for click
       item.innerHTML = `
         <div class="bag-thumb" style="background-image:url('${p.dataUrl}')"></div>
         <div>Photo • ${new Date(p.ts).toLocaleDateString()}</div>
@@ -242,15 +286,125 @@ class SnapLensProper {
     });
   }
 
+  wireGalleryClicks() {
+    const grid = document.getElementById('bag-grid');
+    if (!grid) return;
+    grid.addEventListener('click', (e) => {
+      const card = (e.target instanceof Element) ? e.target.closest('.bag-item') : null;
+      if (!card) return;
+      const id = card.dataset.id;
+      if (!id) return;
+      this.openGalleryPreview(id);
+    });
+  }
+
+  async openGalleryPreview(id) {
+    this.currentGalleryId = id;
+    const photo = photoStore.getById(id);
+    if (!photo) return;
+
+    // Show highest quality we have; prefer Supabase URL if known
+    const imgUrl = photo.supaUrl || photo.dataUrl;
+    this.galleryPreviewImg.src = imgUrl;
+    this.galleryPreview.classList.remove('hidden');
+  }
+
+  wireGalleryPreview() {
+    // Share
+    this.shareByEmailBtn?.addEventListener('click', async () => {
+      if (!this.currentGalleryId) return;
+      const emailsRaw = (this.shareEmailsInput?.value || '').trim();
+      const recipients = emailsRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+      const photo = photoStore.getById(this.currentGalleryId);
+      if (!photo) return;
+
+      // Ensure uploaded for a proper link
+      const url = await this.ensureUploadedAndGetUrl(photo);
+
+      // Try native share with file first (best UX on phones)
+      try {
+        if (navigator.canShare && url) {
+          const resp = await fetch(url);
+          const blob = await resp.blob();
+          const file = new File([blob], 'bayou-photo.png', { type: blob.type || 'image/png' });
+
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: 'Your Bayou Photo',
+              text: 'Here is your photo!',
+              files: [file],
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.log('Native share failed, falling back to mailto:', err);
+      }
+
+      // Fallback: mailto with link in body (supports multiple recipients)
+      if (url && recipients.length) {
+        const subject = encodeURIComponent('Your Bayou Photo');
+        const body = encodeURIComponent(`Here is your photo:\n${url}`);
+        const to = encodeURIComponent(recipients.join(','));
+        window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+      } else if (url) {
+        // If no emails supplied, at least open mail compose with link
+        const subject = encodeURIComponent('Your Bayou Photo');
+        const body = encodeURIComponent(`Here is your photo:\n${url}`);
+        window.location.href = `mailto:?subject=${subject}&body=${body}`;
+      }
+    });
+
+    // Close
+    this.closeGalleryBtn?.addEventListener('click', () => {
+      this.galleryPreview.classList.add('hidden');
+      this.galleryPreviewImg.src = '';
+      this.shareEmailsInput.value = '';
+      this.currentGalleryId = null;
+    });
+  }
+
+  /* Ensure the selected photo has a Supabase URL; upload if missing. */
+  async ensureUploadedAndGetUrl(photo) {
+    if (photo.supaUrl) return photo.supaUrl;
+    if (!supabase) return null;
+
+    try {
+      const filename = `snap-${photo.id}.png`;
+      const blob = await dataUrlToBlob(photo.dataUrl);
+
+      const already = await supabase.storage.from(BUCKET).list('', { search: filename });
+      if (!already?.data?.length) {
+        const { error: upErr } = await supabase.storage
+          .from(BUCKET)
+          .upload(filename, blob, { contentType: 'image/png', upsert: true });
+        if (upErr) throw upErr;
+      }
+
+      // try public url, else signed
+      let url = supabase.storage.from(BUCKET).getPublicUrl(filename)?.data?.publicUrl;
+      if (!url) {
+        const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(filename, 60 * 60 * 24);
+        if (error) throw error;
+        url = data?.signedUrl;
+      }
+
+      photoStore.update(photo.id, { supaPath: filename, supaUrl: url });
+      return url;
+    } catch (e) {
+      console.error('ensureUploadedAndGetUrl failed:', e);
+      return null;
+    }
+  }
+
   /* ---------------- Capture / Preview / Save ---------------- */
   setupCaptureButton() {
     const btn = this.captureButton;
     if (!btn) return;
 
     const onPress = (ev) => {
-      // Stop propagation so container’s double-tap listener doesn’t see this
       ev.stopPropagation?.();
-      // Prevent ghost click on iOS after touchend
       ev.preventDefault?.();
 
       if (this.photoPreview?.classList.contains('show')) {
@@ -263,7 +417,6 @@ class SnapLensProper {
     if (window.PointerEvent) {
       btn.addEventListener('pointerup', onPress);
     } else {
-      // Fallback for very old browsers
       btn.addEventListener('touchend', onPress, { passive: false });
       btn.addEventListener('click', onPress);
     }
@@ -284,12 +437,10 @@ class SnapLensProper {
       const h = Math.max(1, this.liveCanvas.height || Math.round(rect.height));
 
       const temp = document.createElement('canvas');
-      temp.width = w;
-      temp.height = h;
+      temp.width = w; temp.height = h;
       const ctx = temp.getContext('2d');
       ctx.drawImage(this.liveCanvas, 0, 0, w, h);
 
-      // Safari-safe toBlob
       const toBlobSafe = (cv, cb) => {
         if (cv.toBlob) return cv.toBlob(cb, 'image/png');
         const dataUrl = cv.toDataURL('image/png');
@@ -318,29 +469,44 @@ class SnapLensProper {
       this.previewImage.src = '';
     }
     this.lastCapturedBlob = null;
+    this.lastSavedId = null;
     if (this.saveButton) { this.saveButton.textContent = '📤'; this.saveButton.disabled = false; }
   }
 
   async saveToSupabase() {
     if (!this.lastCapturedBlob) return;
 
-    // Always add to local Backpack
-    await photoStore.addBlob(this.lastCapturedBlob);
+    // 1) Add to local Backpack immediately (returns id we can use)
+    const id = await photoStore.addBlob(this.lastCapturedBlob);
+    this.lastSavedId = id;
     if (!this.backpackView?.classList.contains('hidden')) this.renderBackpack();
 
-    // Optional: upload to Supabase
-    if (!supabase) return this.hidePhotoPreview();
+    // 2) Upload to Supabase (optional but desired)
+    if (!supabase) { this.hidePhotoPreview(); return; }
 
     try {
       this.saveButton.textContent = '⏳';
       this.saveButton.disabled = true;
 
-      const filename = `snap-${Date.now()}.png`;
+      const filename = `snap-${id}.png`;
       const { error } = await supabase.storage
         .from(BUCKET)
-        .upload(filename, this.lastCapturedBlob, { contentType: 'image/png' });
-
+        .upload(filename, this.lastCapturedBlob, { contentType: 'image/png', upsert: true });
       if (error) throw error;
+
+      // 3) Resolve URL (public or signed)
+      let url = supabase.storage.from(BUCKET).getPublicUrl(filename)?.data?.publicUrl;
+      if (!url) {
+        const { data, error: sErr } = await supabase.storage.from(BUCKET).createSignedUrl(filename, 60 * 60 * 24);
+        if (sErr) throw sErr;
+        url = data?.signedUrl;
+      }
+
+      // Store Supabase info in our gallery item
+      photoStore.update(id, { supaPath: filename, supaUrl: url });
+
+      // 4) Download HQ file to device (as requested)
+      downloadBlob(this.lastCapturedBlob, filename);
 
       this.saveButton.textContent = '✅';
       setTimeout(() => this.hidePhotoPreview(), 900);
@@ -389,7 +555,6 @@ class SnapLensProper {
       }
     };
 
-    // Do NOT swallow button taps; don't call preventDefault
     cameraContainer.addEventListener('touchend', (e) => {
       if (e.target instanceof Element && e.target.closest('button')) return;
       handleTap();

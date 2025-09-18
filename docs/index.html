@@ -41,7 +41,7 @@
     }
     .capture-button::after { content:"📷"; font-size:1.2rem; }
 
-    /* Preview overlay */
+    /* Camera Preview overlay (after capture) */
     .photo-preview {
       position:absolute; inset:0; background:#000; display:none; z-index:20;
       align-items:center; justify-content:center; flex-direction:column;
@@ -67,7 +67,7 @@
       background: rgba(255,255,255,.06);
       border: 1px solid rgba(255,255,255,.1);
       border-radius: 12px;
-      padding:10px; text-align:center;
+      padding:10px; text-align:center; cursor:pointer;
     }
     .bag-thumb{
       width:100%; aspect-ratio:1/1; border-radius:10px;
@@ -90,6 +90,35 @@
       background:#e74c3c; color:#fff; border:0; padding:12px 16px; border-radius:12px; font-weight:700;
     }
 
+    /* Gallery Preview overlay (for items in Backpack) */
+    .gallery-preview {
+      position: fixed; inset: 0; z-index: 40;
+      background: rgba(0,0,0,0.95);
+      display: none; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .gallery-preview:not(.hidden){ display:flex; }
+    .gp-content {
+      width: min(96vw, 960px);
+      height: min(84vh, 820px);
+      display: grid; grid-template-rows: 1fr auto; gap: 12px;
+    }
+    .gp-content img {
+      width: 100%; height: 100%; object-fit: contain; background:#000; border-radius: 8px;
+    }
+    .gp-actions {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
+      align-items: center;
+    }
+    .gp-actions input[type="email"] {
+      width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25);
+      background: rgba(255,255,255,.08); color: #fff;
+    }
+    .gp-actions button {
+      background: rgba(0,122,255,0.95); color: #fff; border: 0; padding: 10px 14px; border-radius: 10px; font-weight: 700;
+    }
+    #closeGalleryPreview { background: rgba(255,255,255,.85); color:#000; }
+
     /* Bottom navigation */
     .bottom-nav{
       position:fixed; left:0; right:0; bottom:0; z-index:30;
@@ -108,7 +137,7 @@
     .nav-btn .label{ font-size:12px; opacity:.9 }
     .nav-btn.active .label{ font-weight:700; opacity:1 }
   </style>
-  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/main-Dtono__C.js"></script>
+  <script type="module" crossorigin src="/SiliconBayouWebApp/assets/main-C4q0FJeL.js"></script>
   <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/modulepreload-polyfill-B5Qt9EMX.js">
 </head>
 <body>
@@ -122,7 +151,7 @@
       <!-- Capture -->
       <button class="capture-button" id="captureButton" title="Capture Photo"></button>
 
-      <!-- Preview -->
+      <!-- Preview (after capture) -->
       <div class="photo-preview" id="photoPreview">
         <img id="previewImage" alt="Captured Photo" />
         <div class="photo-preview-controls">
@@ -155,6 +184,18 @@
       <button id="btn-reset-app" class="danger-btn" aria-label="Reset App">Reset App (Clear Gallery)</button>
     </div>
   </section>
+
+  <!-- GALLERY PREVIEW OVERLAY -->
+  <div class="gallery-preview hidden" id="galleryPreview">
+    <div class="gp-content">
+      <img id="galleryPreviewImg" alt="Photo preview" />
+      <div class="gp-actions">
+        <input id="shareEmails" type="email" placeholder="Enter email(s), comma-separated" multiple />
+        <button id="shareByEmailBtn">Share</button>
+        <button id="closeGalleryPreview">Close</button>
+      </div>
+    </div>
+  </div>
 
   <!-- BOTTOM NAV (with icons from images/) -->
   <nav class="bottom-nav" aria-label="Primary">
