@@ -233,9 +233,9 @@ class BayouARApp {
       const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
       supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
       
-      console.log('🟢 Supabase initialized successfully');
+      console.log('● Supabase initialized successfully');
     } catch (error) {
-      console.error('❌ Supabase initialization failed:', error);
+      console.error('■ Supabase initialization failed:', error);
     }
   }
   
@@ -478,7 +478,7 @@ class BayouARApp {
             this.downloadPhoto(blob);
           }
           
-          console.log('📸 Photo captured!');
+          console.log('● Photo captured!');
           
           if (this.captureButton) {
             this.captureButton.style.transform = 'scale(0.95)';
@@ -513,7 +513,7 @@ class BayouARApp {
     }
     
     if (this.saveButton) {
-      this.saveButton.textContent = '📤';
+      this.saveButton.textContent = '○';
       this.saveButton.disabled = false;
     }
     
@@ -532,14 +532,14 @@ class BayouARApp {
     
     try {
       if (this.saveButton) {
-        this.saveButton.textContent = '⏳';
+        this.saveButton.textContent = '●●●';
         this.saveButton.disabled = true;
       }
       
       const timestamp = Date.now();
       const filename = `snap-capture-${timestamp}.png`;
       
-      console.log('📤 Uploading photo to Supabase...');
+      console.log('↑ Uploading photo to Supabase...');
       const { data, error } = await supabase.storage
         .from(BUCKET)
         .upload(filename, this.lastCapturedBlob, {
@@ -548,22 +548,22 @@ class BayouARApp {
       
       if (error) throw error;
       
-      console.log('✅ Photo saved to Supabase:', filename);
+      console.log('● Photo saved to Supabase:', filename);
       
       if (this.saveButton) {
-        this.saveButton.textContent = '✅';
+        this.saveButton.textContent = '●';
         setTimeout(() => {
           this.hidePhotoPreview();
         }, 1000);
       }
       
     } catch (error) {
-      console.error('❌ Failed to save to Supabase:', error);
+      console.error('■ Failed to save to Supabase:', error);
       
       if (this.saveButton) {
-        this.saveButton.textContent = '❌';
+        this.saveButton.textContent = '■';
         setTimeout(() => {
-          this.saveButton.textContent = '📤';
+          this.saveButton.textContent = '↑';
           this.saveButton.disabled = false;
         }, 2000);
       }
@@ -615,12 +615,12 @@ class BayouARApp {
     const startAudio = async () => {
       try {
         await this.backgroundAudio.play();
-        console.log('✅ Background audio started');
+        console.log('● Background audio started');
         document.removeEventListener('touchstart', startAudio);
         document.removeEventListener('click', startAudio);
         document.removeEventListener('keydown', startAudio);
       } catch (error) {
-        console.error('❌ Audio play failed:', error);
+        console.error('■ Audio play failed:', error);
       }
     };
     

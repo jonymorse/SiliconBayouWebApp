@@ -36,12 +36,12 @@
         position: absolute;
         top: 20px;
         right: 20px;
-        background: rgba(255, 59, 48, 0.8);
+        background: rgba(255, 255, 255, 0.15);
         color: white;
-        border: 2px solid rgba(255, 59, 48, 0.9);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 50%;
-        width: 50px;
-        height: 50px;
+        width: 60px;
+        height: 60px;
         cursor: pointer;
         transition: all 0.3s ease;
         z-index: 100;
@@ -49,27 +49,32 @@
         align-items: center;
         justify-content: center;
         font-size: 1.2rem;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
       }
 
       .capture-button:hover,
       .capture-button:active {
-        background: rgba(255, 59, 48, 0.9);
-        border-color: rgba(255, 59, 48, 1);
+        background: rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.3);
         transform: scale(1.05);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
       }
 
       .capture-button:disabled {
-        background: rgba(128, 128, 128, 0.3);
-        border-color: rgba(128, 128, 128, 0.3);
-        color: #999;
+        background: rgba(128, 128, 128, 0.1);
+        border-color: rgba(128, 128, 128, 0.2);
+        color: rgba(255, 255, 255, 0.5);
         cursor: not-allowed;
         transform: none;
       }
 
       .capture-button::after {
-        content: "📷";
+        content: "●";
+        font-size: 1.6rem;
+        font-weight: bold;
+        color: white;
       }
 
       /* Photo Preview Overlay */
@@ -109,33 +114,37 @@
       }
 
       .preview-button {
-        background: rgba(255, 255, 255, 0.9);
-        color: #000;
-        border: none;
-        border-radius: 25px;
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
         padding: 12px 20px;
         font-size: 0.9rem;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.3s ease;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
       }
 
       .preview-button:hover,
       .preview-button:active {
-        background: rgba(255, 255, 255, 1);
+        background: rgba(255, 255, 255, 0.25);
+        border-color: rgba(255, 255, 255, 0.3);
         transform: scale(1.05);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
       }
 
       .preview-button.download {
-        background: rgba(0, 122, 255, 0.9);
-        color: white;
+        background: rgba(0, 122, 255, 0.2);
+        border-color: rgba(0, 122, 255, 0.3);
       }
 
       .preview-button.download:hover,
       .preview-button.download:active {
-        background: rgba(0, 122, 255, 1);
+        background: rgba(0, 122, 255, 0.3);
+        border-color: rgba(0, 122, 255, 0.4);
       }
       
       /* Safe area handling */
@@ -161,8 +170,8 @@
     <div class="photo-preview" id="photoPreview">
       <img id="previewImage" alt="Captured Photo">
       <div class="photo-preview-controls">
-        <button class="preview-button" id="retakeButton">✕</button>
-        <button class="preview-button download" id="saveButton">📤</button>
+        <button class="preview-button" id="retakeButton">×</button>
+        <button class="preview-button download" id="saveButton">↑</button>
       </div>
     </div>
     
