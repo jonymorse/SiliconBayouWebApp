@@ -192,6 +192,13 @@ class BayouARApp {
         gameState = sanitizeState(cachedState);
         log('Restored state from cache after camera switch:', gameState);
       }
+    } else {
+      // On normal page load, still try to load any existing cache
+      const cachedState = loadStateFromCache();
+      if (cachedState) {
+        gameState = sanitizeState(cachedState);
+        log('Restored state from cache on startup:', gameState);
+      }
     }
     
     this.setupDoubleTapGesture();
@@ -314,8 +321,29 @@ class BayouARApp {
     if (!this.session) return;
     
     try {
-      // Mark this as a camera switch for cache restoration
-      markCameraSwitch();
+      const newFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+      
+      // ASYMMETRIC SWITCHING LOGIC:
+      // Front → Back (user → environment): RELOAD PAGE
+      // Back → Front (environment → user): SMOOTH SWITCH
+      
+      if (this.currentFacingMode === 'user' && newFacingMode === 'environment') {
+        // Front → Back: Save state and reload page
+        log('Switching from front to back camera - reloading page');
+        markCameraSwitch();
+        saveStateToCache(gameState);
+        
+        // Stop current stream before reload
+        if (this.mediaStream) {
+          this.mediaStream.getTracks().forEach(track => track.stop());
+        }
+        
+        window.location.reload();
+        return;
+      }
+      
+      // Back → Front: Smooth switch (no reload)
+      log('Switching from back to front camera - smooth switch');
       
       // Stop current stream
       if (this.mediaStream) {
@@ -323,17 +351,24 @@ class BayouARApp {
       }
       
       // Switch camera mode
-      this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+      this.currentFacingMode = newFacingMode;
       
-      // Save current state before reload
-      saveStateToCache(gameState);
+      // Restart camera with new facing mode
+      await this.startCamera();
       
-      // Reload the page to restart everything
-      window.location.reload();
+      // Reapply lens if it was active
+      if (this.lensActive && this.currentLens) {
+        await this.session.applyLens(this.currentLens);
+      }
+      
+      console.log(`Camera switched to: ${this.currentFacingMode}`);
       
     } catch (error) {
       console.error('Switch failed:', error);
-      this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+      // Revert facing mode on failure (only for smooth switches)
+      if (this.currentFacingMode === 'environment') {
+        this.currentFacingMode = 'user';
+      }
     }
   }
   
