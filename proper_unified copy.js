@@ -1,4 +1,4 @@
-// Unified proper.js - Remote API + Camera Controls + Caching System + Photo Capture
+// Unified proper.js - Remote API + Camera Controls + Caching System
 import {
   bootstrapCameraKit,
   createMediaStreamSource,
@@ -7,14 +7,6 @@ import {
   Transform2D,
 } from '@snap/camera-kit';
 import { CONFIG } from './config.js';
-
-// Supabase configuration
-const SUPABASE_URL = 'https://fwcdxvnpcpyxywbjwyaa.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ3Y2R4dm5wY3B5eHl3Ymp3eWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc5OTg5NjMsImV4cCI6MjA3MzU3NDk2M30.XEfxRw39wp5jMs3YWFszhFZ1_ZXOilraSBN8R1e3LOI';
-const BUCKET = 'gallerybucket';
-
-// Initialize Supabase (will be available after DOM loads)
-let supabase;
 
 // ---------- Utilities ----------
 const enc = new TextEncoder();
@@ -178,12 +170,6 @@ const provideRemoteApi = () => ({
 class BayouARApp {
   constructor() {
     this.outputContainer = document.getElementById('app');
-    this.captureButton = document.getElementById('captureButton');
-    this.photoPreview = document.getElementById('photoPreview');
-    this.previewImage = document.getElementById('previewImage');
-    this.retakeButton = document.getElementById('retakeButton');
-    this.saveButton = document.getElementById('saveButton');
-    this.lastCapturedBlob = null;
     this.cameraKit = null;
     this.session = null;
     this.mediaStream = null;
@@ -213,58 +199,12 @@ class BayouARApp {
       log('Manual refresh detected - cache cleared, starting fresh');
     }
     
-    // Initialize Supabase
-    await this.initializeSupabase();
-    
-    // Setup UI event listeners
-    this.setupCaptureButton();
-    this.setupPreviewControls();
     this.setupDoubleTapGesture();
     this.setupBackgroundAudio();
-    
-    // Initialize Camera Kit
     await this.initializeCameraKit();
     await this.autoStartWithLens();
   }
-
-  async initializeSupabase() {
-    try {
-      // Import Supabase
-      const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-      supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-      
-      console.log('🟢 Supabase initialized successfully');
-    } catch (error) {
-      console.error('❌ Supabase initialization failed:', error);
-    }
-  }
   
-  setupCaptureButton() {
-    if (this.captureButton) {
-      this.captureButton.addEventListener('click', () => {
-        if (this.photoPreview && this.photoPreview.classList.contains('show')) {
-          this.hidePhotoPreview();
-        } else {
-          this.capturePhoto();
-        }
-      });
-    }
-  }
-  
-  setupPreviewControls() {
-    if (this.retakeButton) {
-      this.retakeButton.addEventListener('click', () => {
-        this.hidePhotoPreview();
-      });
-    }
-    
-    if (this.saveButton) {
-      this.saveButton.addEventListener('click', () => {
-        this.saveToSupabase();
-      });
-    }
-  }
-
   async initializeCameraKit() {
     try {
       // Initialize Camera Kit with Remote API provider
@@ -305,7 +245,7 @@ class BayouARApp {
         const rect = this.liveCanvas.getBoundingClientRect();
         this.liveCanvas.width = Math.round(rect.width * dpr);
         this.liveCanvas.height = Math.round(rect.height * dpr);
-        console.log(`Canvas sized: ${this.liveCanvas.width}x${this.liveCanvas.height}`);
+        console.log(`Canvas sized: ${this.liveCanvas.width}x${this.liveCanvas.height} (CSS: ${rect.width}x${rect.height}, DPR: ${dpr})`);
       };
       
       new ResizeObserver(resizeLiveCanvas).observe(this.liveCanvas.parentElement);
@@ -317,7 +257,7 @@ class BayouARApp {
       console.error('Failed to initialize Camera Kit:', error);
     }
   }
-
+  
   async startCamera() {
     try {
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -362,7 +302,7 @@ class BayouARApp {
       console.error('Fallback camera failed:', fallbackError);
     }
   }
-
+  
   async switchCamera() {
     if (!this.session) return;
     
@@ -417,7 +357,7 @@ class BayouARApp {
       }
     }
   }
-
+  
   async toggleLens() {
     if (!this.session) return;
     
@@ -450,144 +390,6 @@ class BayouARApp {
       console.error('Auto-start failed:', error);
     }
   }
-
-  capturePhoto() {
-    if (!this.session || !this.liveCanvas) {
-      console.error('Camera session not ready for capture');
-      return;
-    }
-    
-    try {
-      const tempCanvas = document.createElement('canvas');
-      const tempCtx = tempCanvas.getContext('2d');
-      
-      tempCanvas.width = this.liveCanvas.width;
-      tempCanvas.height = this.liveCanvas.height;
-      
-      tempCtx.drawImage(this.liveCanvas, 0, 0);
-      
-      tempCanvas.toBlob((blob) => {
-        if (blob) {
-          this.lastCapturedBlob = blob;
-          const url = URL.createObjectURL(blob);
-          
-          if (this.previewImage && this.photoPreview) {
-            this.previewImage.src = url;
-            this.showPhotoPreview();
-          } else {
-            this.downloadPhoto(blob);
-          }
-          
-          console.log('📸 Photo captured!');
-          
-          if (this.captureButton) {
-            this.captureButton.style.transform = 'scale(0.95)';
-            setTimeout(() => {
-              this.captureButton.style.transform = '';
-            }, 150);
-          }
-        }
-      }, 'image/png');
-      
-    } catch (error) {
-      console.error('Photo capture failed:', error);
-    }
-  }
-
-  showPhotoPreview() {
-    if (this.photoPreview) {
-      this.photoPreview.classList.add('show');
-      if (this.captureButton) {
-        this.captureButton.style.opacity = '0.8';
-      }
-    }
-  }
-  
-  hidePhotoPreview() {
-    if (this.photoPreview) {
-      this.photoPreview.classList.remove('show');
-    }
-    
-    if (this.captureButton) {
-      this.captureButton.style.opacity = '1';
-    }
-    
-    if (this.saveButton) {
-      this.saveButton.textContent = '📤';
-      this.saveButton.disabled = false;
-    }
-    
-    if (this.previewImage && this.previewImage.src) {
-      URL.revokeObjectURL(this.previewImage.src);
-      this.previewImage.src = '';
-    }
-    this.lastCapturedBlob = null;
-  }
-  
-  async saveToSupabase() {
-    if (!this.lastCapturedBlob || !supabase) {
-      console.error('Cannot save: Missing photo data or Supabase not initialized');
-      return;
-    }
-    
-    try {
-      if (this.saveButton) {
-        this.saveButton.textContent = '⏳';
-        this.saveButton.disabled = true;
-      }
-      
-      const timestamp = Date.now();
-      const filename = `snap-capture-${timestamp}.png`;
-      
-      console.log('📤 Uploading photo to Supabase...');
-      const { data, error } = await supabase.storage
-        .from(BUCKET)
-        .upload(filename, this.lastCapturedBlob, {
-          contentType: 'image/png'
-        });
-      
-      if (error) throw error;
-      
-      console.log('✅ Photo saved to Supabase:', filename);
-      
-      if (this.saveButton) {
-        this.saveButton.textContent = '✅';
-        setTimeout(() => {
-          this.hidePhotoPreview();
-        }, 1000);
-      }
-      
-    } catch (error) {
-      console.error('❌ Failed to save to Supabase:', error);
-      
-      if (this.saveButton) {
-        this.saveButton.textContent = '❌';
-        setTimeout(() => {
-          this.saveButton.textContent = '📤';
-          this.saveButton.disabled = false;
-        }, 2000);
-      }
-    }
-  }
-
-  downloadPhoto(blob = null) {
-    const photoBlob = blob || this.lastCapturedBlob;
-    if (photoBlob) {
-      const url = URL.createObjectURL(photoBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `snap-capture-${Date.now()}.png`;
-      link.style.display = 'none';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      URL.revokeObjectURL(url);
-      
-      console.log('💾 Photo downloaded locally!');
-    }
-  }
   
   setupDoubleTapGesture() {
     const container = this.outputContainer;
@@ -606,11 +408,17 @@ class BayouARApp {
   
   setupBackgroundAudio() {
     if (!this.backgroundAudio) {
+      console.log('No background audio element found');
       return;
     }
     
     this.backgroundAudio.volume = 0.2;
     this.backgroundAudio.loop = true;
+    
+    this.backgroundAudio.addEventListener('canplay', () => console.log('Audio ready'));
+    this.backgroundAudio.addEventListener('error', (e) => {
+      console.error('Audio error:', e.target.error);
+    });
     
     const startAudio = async () => {
       try {
@@ -632,7 +440,7 @@ class BayouARApp {
       console.log('Audio autoplay prevented - waiting for user interaction');
     });
   }
-
+  
   handleDoubleTap() {
     const currentTime = Date.now();
     const tapLength = currentTime - this.lastTap;
@@ -643,12 +451,17 @@ class BayouARApp {
     }
     
     if (tapLength < 300 && tapLength > 0) {
+      // Double tap detected - switch camera
       this.switchCamera();
       this.lastTap = 0;
     } else {
       this.lastTap = currentTime;
       this.tapTimeout = setTimeout(() => this.lastTap = 0, 300);
     }
+  }
+  
+  updateStatus(message) {
+    console.log(`[BayouAR] ${message}`);
   }
   
   destroy() {
@@ -669,7 +482,7 @@ class BayouARApp {
 async function start() {
   try {
     window.bayouApp = new BayouARApp();
-    console.log('🎮 Bayou AR App initialized with Remote API + Caching + Photo Capture');
+    console.log('🎮 Bayou AR App initialized with Remote API + Caching');
   } catch (err) {
     console.error('Failed to start app:', err);
     const app = document.getElementById('app');
@@ -691,4 +504,4 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-console.log('🚀 Unified Bayou AR script loaded (Remote API + Camera + Caching + Photo Capture)');
+console.log('🚀 Unified Bayou AR script loaded (Remote API + Camera + Caching)');
