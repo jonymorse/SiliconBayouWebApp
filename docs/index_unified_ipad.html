@@ -2,8 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
-    <title>Bayou AR - Unified</title>
+    <!-- iPad Pro optimized viewport -->
+    <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content" />
+    <title>Bayou AR - iPad Pro</title>
     <style>
       html, body { 
         height: 100%; 
@@ -11,14 +12,24 @@
         background: #000; 
         overflow: hidden;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        /* iPad Pro specific optimizations */
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
       }
+      
       #app { 
         position: fixed; 
         inset: 0; 
         width: 100vw;
         height: 100vh;
         height: 100dvh; /* Dynamic viewport height for mobile */
+        /* iPad Pro specific canvas sizing */
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
+      
       canvas { 
         width: 100% !important; 
         height: 100% !important; 
@@ -29,29 +40,37 @@
         border-radius: 0 !important;
         max-width: none !important;
         max-height: none !important;
+        /* iPad Pro camera optimization */
+        image-rendering: optimizeQuality;
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
       }
       
-      /* Capture Button */
+      /* Capture Button - iPad Pro optimized positioning */
       .capture-button {
         position: absolute;
-        top: 20px;
-        right: 20px;
+        top: 30px;
+        right: 30px;
         background: rgba(255, 255, 255, 0.15);
         color: white;
         border: 1px solid rgba(255, 255, 255, 0.2);
         border-radius: 50%;
-        width: 60px;
-        height: 60px;
+        width: 80px;
+        height: 80px;
         cursor: pointer;
         transition: all 0.3s ease;
         z-index: 100;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.2rem;
+        font-size: 1.4rem;
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        /* iPad Pro touch optimization */
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: manipulation;
       }
 
       .capture-button:hover,
@@ -72,12 +91,12 @@
 
       .capture-button::after {
         content: "●";
-        font-size: 1.6rem;
+        font-size: 2rem;
         font-weight: bold;
         color: white;
       }
 
-      /* Photo Preview Overlay */
+      /* Photo Preview Overlay - iPad Pro optimized */
       .photo-preview {
         position: absolute;
         top: 0;
@@ -90,6 +109,8 @@
         flex-direction: column;
         justify-content: center;
         align-items: center;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
 
       .photo-preview.show {
@@ -97,19 +118,20 @@
       }
 
       .photo-preview img {
-        max-width: 100%;
-        max-height: 100%;
+        max-width: 90%;
+        max-height: 85%;
         object-fit: contain;
-        border-radius: 8px;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
       }
 
       .photo-preview-controls {
         position: absolute;
-        bottom: 30px;
+        bottom: 50px;
         left: 50%;
         transform: translateX(-50%);
         display: flex;
-        gap: 20px;
+        gap: 30px;
         z-index: 201;
       }
 
@@ -117,15 +139,21 @@
         background: rgba(255, 255, 255, 0.15);
         color: white;
         border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 20px;
-        padding: 12px 20px;
-        font-size: 0.9rem;
+        border-radius: 25px;
+        padding: 16px 28px;
+        font-size: 1.1rem;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.3s ease;
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        /* iPad Pro touch optimization */
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: manipulation;
+        min-width: 60px;
+        min-height: 60px;
       }
 
       .preview-button:hover,
@@ -147,19 +175,87 @@
         border-color: rgba(0, 122, 255, 0.4);
       }
       
-      /* Safe area handling */
+      /* iPad Pro safe area handling */
       @supports (padding: max(0px)) {
         #app {
           padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
         
         .capture-button {
-          top: max(20px, env(safe-area-inset-top));
-          right: max(20px, env(safe-area-inset-right));
+          top: max(30px, env(safe-area-inset-top) + 20px);
+          right: max(30px, env(safe-area-inset-right) + 20px);
+        }
+        
+        .photo-preview-controls {
+          bottom: max(50px, env(safe-area-inset-bottom) + 30px);
+        }
+      }
+      
+      /* iPad Pro landscape optimizations */
+      @media screen and (orientation: landscape) and (min-width: 1024px) {
+        .capture-button {
+          width: 90px;
+          height: 90px;
+          top: 40px;
+          right: 40px;
+        }
+        
+        .capture-button::after {
+          font-size: 2.2rem;
+        }
+        
+        .photo-preview img {
+          max-width: 85%;
+          max-height: 80%;
+        }
+        
+        .photo-preview-controls {
+          bottom: 60px;
+          gap: 40px;
+        }
+        
+        .preview-button {
+          padding: 18px 32px;
+          font-size: 1.2rem;
+          min-width: 70px;
+          min-height: 70px;
+        }
+      }
+      
+      /* iPad Pro portrait optimizations */
+      @media screen and (orientation: portrait) and (min-width: 768px) {
+        .capture-button {
+          top: 40px;
+          right: 40px;
+        }
+        
+        .photo-preview-controls {
+          bottom: 80px;
+        }
+      }
+      
+      /* Specific iPad Pro 12.9" optimizations */
+      @media screen and (min-width: 1024px) and (min-height: 1366px) {
+        .capture-button {
+          width: 100px;
+          height: 100px;
+          top: 50px;
+          right: 50px;
+        }
+        
+        .capture-button::after {
+          font-size: 2.5rem;
+        }
+        
+        .preview-button {
+          padding: 20px 36px;
+          font-size: 1.3rem;
+          min-width: 80px;
+          min-height: 80px;
         }
       }
     </style>
-    <script type="module" crossorigin src="/SiliconBayouWebApp/assets/unified-SOJ2SCbf.js"></script>
+    <script type="module" crossorigin src="/SiliconBayouWebApp/assets/ipad-DyxIIsT7.js"></script>
     <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/modulepreload-polyfill-B5Qt9EMX.js">
     <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/preload-helper-BNaQLqFv.js">
     <link rel="modulepreload" crossorigin href="/SiliconBayouWebApp/assets/config-DGZoT654.js">

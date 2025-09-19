@@ -10,7 +10,9 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         unified: resolve(__dirname, 'index_unified.html'),
-        gallery: resolve(__dirname, 'supa.html')
+        gallery: resolve(__dirname, 'supa.html'),
+        ipad: resolve(__dirname, 'index_unified_ipad.html'), // ← This line
+
       }
     }
   }
