@@ -8,7 +8,7 @@ const BUCKET = 'gallerybucket';
 let supabase;
 
 /* ---------------- Lens config (same lens for both tabs) ---------------- */
-const LENS_ID = '7ccf8919-db07-4bf3-af41-00cb811b5164';
+const LENS_ID = '62eaf3b0-605a-42e7-a750-640f843a7647';
 const LENS_GROUP_ID = '1d5338a5-2299-44e8-b41d-e69573824971';
 const API_TOKEN     =
   'eyJhbGciOiJIUzI1NiIsImtpZCI6IkNhbnZhc1MyU0hNQUNQcm9kIiwidHlwIjoiSldUIn0.eyJhdWQiOiJjYW52YXMtY2FudmFzYXBpIiwiaXNzIjoiY2FudmFzLXMyc3Rva2VuIiwibmJmIjoxNzU2MDg0MjEwLCJzdWIiOiJmODFlYmJhMC1iZWIwLTRjZjItOWJlMC03MzVhMTJkNGQxMWR-U1RBR0lOR345ZWY5YTc2Mi0zMTIwLTRiOTQtOTUwMy04NWFmZjc0MWU5YmIifQ.UR2iAXnhuNEOmPuk7-qsu8vD09mrRio3vNtUo0BNz8M';
