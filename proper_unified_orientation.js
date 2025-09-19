@@ -285,19 +285,12 @@ class RearCameraOrientationManager {
       }
     };
 
-    // CRITICAL: Request native orientation resolution
-    if (this.currentOrientation === 'landscape') {
-      // Request landscape resolution when in landscape
-      baseConstraints.video.width = { ideal: 1920, max: 1920 };
-      baseConstraints.video.height = { ideal: 1080, max: 1080 };
-    } else {
-      // Request portrait resolution when in portrait
-      baseConstraints.video.width = { ideal: 1080, max: 1080 };
-      baseConstraints.video.height = { ideal: 1920, max: 1920 };
-    }
+    // CRITICAL FIX: Always request standard landscape resolution
+    // Let the device handle orientation automatically
+    baseConstraints.video.width = { ideal: 1280 };
+    baseConstraints.video.height = { ideal: 720 };
 
-    console.log(`[RearCamera] Requesting ${this.currentOrientation} resolution:`, 
-      baseConstraints.video.width.ideal + 'x' + baseConstraints.video.height.ideal);
+    console.log(`[RearCamera] Requesting standard landscape resolution: 1280x720 for ${this.currentOrientation} mode`);
 
     return baseConstraints;
   }
@@ -312,25 +305,25 @@ class RearCameraOrientationManager {
         await this.session.clearLens();
         this.worldTrackingActive = false;
         
-        // Small delay to ensure world tracking is fully cleared
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Delay to ensure world tracking is fully cleared
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
 
-      // 2. Restart camera with new constraints
+      // 2. Restart camera with standard landscape constraints
       const source = await this.startRearCamera();
 
-      // 3. Reapply lens if it was active
+      // 3. Longer delay for orientation settle
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      // 4. Reapply lens if it was active
       if (this.currentLens) {
         console.log('[RearCamera] Reapplying lens after orientation change');
-        
-        // Delay to allow camera to stabilize
-        await new Promise(resolve => setTimeout(resolve, 500));
         
         await this.session.applyLens(this.currentLens);
         this.worldTrackingActive = true;
       }
 
-      // 4. Update canvas sizing
+      // 5. Update canvas sizing
       this.updateCanvasForOrientation();
 
     } catch (error) {
