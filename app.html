@@ -8,7 +8,12 @@
   />
   <title>AR Camera</title>
   <style>
-    :root { --bottomnavH: 72px; }
+    :root {
+      --bottomnavH: 72px;
+      /* Change this to match the background you use in index.html */
+      --index-bg-image: url('public/images/batonrougepurple.png');
+      --index-bg-overlay: rgba(0,0,0,.45);
+    }
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -17,7 +22,18 @@
     .hidden{ display:none !important; }
 
     /* Views */
-    .view { min-height:100dvh; padding-bottom: var(--bottomnavH); }
+    .view { min-height:100dvh; padding-bottom: var(--bottomnavH); position:relative; }
+
+    /* Reuse the same background used on index.html for non-camera views */
+    .has-hero::before{
+      content:"";
+      position:absolute; inset:0;
+      background:
+        linear-gradient(to bottom, var(--index-bg-overlay), var(--index-bg-overlay)),
+        var(--index-bg-image) center/cover no-repeat fixed;
+      z-index:0;
+    }
+    .has-hero > * { position:relative; z-index:1; }
 
     /* Camera */
     .camera-container {
@@ -41,7 +57,7 @@
     }
     .capture-button::after { content:"📷"; font-size:1.2rem; }
 
-    /* Camera Preview overlay (after capture) */
+    /* Preview overlay (camera capture) */
     .photo-preview {
       position:absolute; inset:0; background:#000; display:none; z-index:20;
       align-items:center; justify-content:center; flex-direction:column;
@@ -80,44 +96,9 @@
       max-width: 980px; margin: 14px auto 0; padding: 0 14px;
       display:flex; flex-direction:column; gap:12px;
     }
-    .setting{
-      display:flex; align-items:center; justify-content:space-between;
-      background: rgba(255,255,255,.06);
-      border:1px solid rgba(255,255,255,.1);
-      padding:12px 14px; border-radius:12px;
-    }
     .danger-btn{
       background:#e74c3c; color:#fff; border:0; padding:12px 16px; border-radius:12px; font-weight:700;
     }
-
-    /* Gallery Preview overlay (for items in Backpack) */
-    .gallery-preview {
-      position: fixed; inset: 0; z-index: 40;
-      background: rgba(0,0,0,0.95);
-      display: none; align-items: center; justify-content: center;
-      padding: 16px;
-    }
-    .gallery-preview:not(.hidden){ display:flex; }
-    .gp-content {
-      width: min(96vw, 960px);
-      height: min(84vh, 820px);
-      display: grid; grid-template-rows: 1fr auto; gap: 12px;
-    }
-    .gp-content img {
-      width: 100%; height: 100%; object-fit: contain; background:#000; border-radius: 8px;
-    }
-    .gp-actions {
-      display: grid; grid-template-columns: 1fr auto auto; gap: 10px;
-      align-items: center;
-    }
-    .gp-actions input[type="email"] {
-      width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.25);
-      background: rgba(255,255,255,.08); color: #fff;
-    }
-    .gp-actions button {
-      background: rgba(0,122,255,0.95); color: #fff; border: 0; padding: 10px 14px; border-radius: 10px; font-weight: 700;
-    }
-    #closeGalleryPreview { background: rgba(255,255,255,.85); color:#000; }
 
     /* Bottom navigation */
     .bottom-nav{
@@ -136,6 +117,27 @@
     .nav-btn .icon img{ width:100%; height:100%; object-fit:contain; display:block; }
     .nav-btn .label{ font-size:12px; opacity:.9 }
     .nav-btn.active .label{ font-weight:700; opacity:1 }
+
+    /* Gallery preview & share overlay (email/share) */
+    .preview-overlay{
+      position:fixed; inset:0; z-index:1000;
+      display:none; flex-direction:column; align-items:center; justify-content:center;
+      background:rgba(0,0,0,.95); padding:16px;
+    }
+    .preview-overlay.show{ display:flex; }
+    .preview-overlay img{
+      max-width:92vw; max-height:70vh; object-fit:contain; margin-bottom:14px; border-radius:12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.55);
+    }
+    .overlay-controls{
+      display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center;
+    }
+    #shareEmails{
+      min-width:260px; padding:10px 12px; border-radius:10px;
+      border:1px solid #444; background:#111; color:#fff;
+    }
+    .btn{ padding:10px 14px; border:0; border-radius:10px; background:#444; color:#fff; font-weight:600; }
+    .btn.primary{ background:#0a84ff; }
   </style>
 </head>
 <body>
@@ -149,7 +151,7 @@
       <!-- Capture -->
       <button class="capture-button" id="captureButton" title="Capture Photo"></button>
 
-      <!-- Preview (after capture) -->
+      <!-- Preview (capture) -->
       <div class="photo-preview" id="photoPreview">
         <img id="previewImage" alt="Captured Photo" />
         <div class="photo-preview-controls">
@@ -160,40 +162,20 @@
     </div>
   </main>
 
-  <!-- GALLERY (Backpack) -->
-  <section id="backpack-view" class="view hidden" aria-label="Backpack">
+  <!-- GALLERY (Backpack) with hero background -->
+  <section id="backpack-view" class="view has-hero hidden" aria-label="Backpack">
     <h2 style="padding:14px;">Gallery</h2>
     <div id="bag-grid" class="bag-grid"></div>
     <p class="muted hidden" id="bag-empty">You haven’t collected anything yet.</p>
   </section>
 
-  <!-- SETTINGS -->
-  <section id="settings-view" class="view hidden" aria-label="Settings">
+  <!-- SETTINGS (only Reset button) with hero background -->
+  <section id="settings-view" class="view has-hero hidden" aria-label="Settings">
     <h2 style="padding:14px;">Settings</h2>
     <div class="settings-list">
-      <label class="setting">
-        <span>High quality rendering</span>
-        <input type="checkbox" id="hq-toggle" />
-      </label>
-      <label class="setting">
-        <span>Mute shutter sound</span>
-        <input type="checkbox" id="mute-toggle" />
-      </label>
       <button id="btn-reset-app" class="danger-btn" aria-label="Reset App">Reset App (Clear Gallery)</button>
     </div>
   </section>
-
-  <!-- GALLERY PREVIEW OVERLAY -->
-  <div class="gallery-preview hidden" id="galleryPreview">
-    <div class="gp-content">
-      <img id="galleryPreviewImg" alt="Photo preview" />
-      <div class="gp-actions">
-        <input id="shareEmails" type="email" placeholder="Enter email(s), comma-separated" multiple />
-        <button id="shareByEmailBtn">Share</button>
-        <button id="closeGalleryPreview">Close</button>
-      </div>
-    </div>
-  </div>
 
   <!-- BOTTOM NAV (with icons from images/) -->
   <nav class="bottom-nav" aria-label="Primary">
@@ -220,6 +202,17 @@
     <source src="bayouaudio_fixed.mp3" type="audio/mp3" />
   </audio>
 
+  <!-- GALLERY PREVIEW & SHARE OVERLAY -->
+  <div id="galleryPreview" class="preview-overlay">
+    <img id="galleryPreviewImg" alt="Selected photo" />
+    <div class="overlay-controls">
+      <input id="shareEmails" type="text" inputmode="email" placeholder="Add emails (comma-separated)" />
+      <button id="shareByEmailBtn" class="btn primary">Share</button>
+      <button id="closeGalleryPreview" class="btn">Close</button>
+    </div>
+  </div>
+
+  <!-- App script -->
   <script type="module" src="./proper.js"></script>
 </body>
 </html>
